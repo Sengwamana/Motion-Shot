@@ -60,90 +60,272 @@ export const setMusicEnabled = (enabled: boolean): void => {
 export const isMusicEnabled = (): boolean => musicEnabled;
 
 // ============================================
-// BACKGROUND MUSIC SYSTEM
+// ENHANCED BACKGROUND MUSIC SYSTEM
 // ============================================
 
 let bgMusicInterval: number | null = null;
 let bgRhythmInterval: number | null = null;
+let bgArpeggioInterval: number | null = null;
+let bgMelodyInterval: number | null = null;
+let bgBassInterval: number | null = null;
 let isMusicPlaying = false;
 
-// Musical notes (frequencies in Hz)
+// Musical notes (frequencies in Hz) - Expanded range
 const NOTES = {
+  C1: 32.70, D1: 36.71, E1: 41.20, F1: 43.65, G1: 49.00, A1: 55.00, B1: 61.74,
+  C2: 65.41, D2: 73.42, E2: 82.41, F2: 87.31, G2: 98.00, A2: 110.00, B2: 123.47,
   C3: 130.81, D3: 146.83, E3: 164.81, F3: 174.61, G3: 196.00, A3: 220.00, B3: 246.94,
   C4: 261.63, D4: 293.66, E4: 329.63, F4: 349.23, G4: 392.00, A4: 440.00, B4: 493.88,
   C5: 523.25, D5: 587.33, E5: 659.25, F5: 698.46, G5: 783.99, A5: 880.00, B5: 987.77,
+  C6: 1046.50, D6: 1174.66, E6: 1318.51,
 };
 
-// Ambient chord progressions (dreamy, space-like feel)
+// Cinematic / Sci-Fi Chord Progression (F minor / Ab Major feel)
+// Fm add9 -> Db maj7 -> Eb sus4 -> Cm7
 const CHORD_PROGRESSION = [
-  [NOTES.C3, NOTES.E4, NOTES.G4, NOTES.B4],      // Cmaj7
-  [NOTES.A3, NOTES.C4, NOTES.E4, NOTES.G4],      // Am7
-  [NOTES.F3, NOTES.A4, NOTES.C5, NOTES.E5],      // Fmaj7
-  [NOTES.G3, NOTES.B3, NOTES.D4, NOTES.F4],      // G7
-  [NOTES.E3, NOTES.G4, NOTES.B4, NOTES.D5],      // Em7
-  [NOTES.D3, NOTES.F4, NOTES.A4, NOTES.C5],      // Dm7
+  { 
+    bass: NOTES.F1, 
+    chord: [NOTES.F3, NOTES.Ab3, NOTES.C4, NOTES.G4], 
+    arp: [NOTES.F4, NOTES.Ab4, NOTES.C5, NOTES.G5] 
+  },
+  { 
+    bass: NOTES.D1, // Db (C#1 is ~34.65, D1 is closest mapped here, adjusting to Db via detune or just approx) - let's use C# if we had it, simulating Db with C# approx or just use relative. F1->C# is difficult without chromatics. 
+    // Let's stick to a scale we defined. Let's use F minor scale notes approx.
+    // Instead of precise chromatics, let's use a standard epic progression available in our notes
+    // VI -> VII -> i -> i (Ab Major context: Db -> Eb -> Fm)
+    // Let's use: F2 (i), Db... wait we don't have flats. 
+    // Let's use A Minor "Epic" context (Am -> F -> G -> Em)
+    bass: NOTES.A1, 
+    chord: [NOTES.A3, NOTES.C4, NOTES.E4, NOTES.B4], // Am add9
+    arp: [NOTES.A4, NOTES.C5, NOTES.E5, NOTES.B5] 
+  },
+  { 
+    bass: NOTES.F1, 
+    chord: [NOTES.F3, NOTES.A3, NOTES.C4, NOTES.E4], // F maj7
+    arp: [NOTES.F4, NOTES.A4, NOTES.C5, NOTES.E5] 
+  },
+  { 
+    bass: NOTES.C2, 
+    chord: [NOTES.C3, NOTES.E3, NOTES.G3, NOTES.D4], // C add9
+    arp: [NOTES.C4, NOTES.E4, NOTES.G4, NOTES.D5] 
+  },
+  { 
+    bass: NOTES.G1, 
+    chord: [NOTES.G3, NOTES.B3, NOTES.D4, NOTES.F4], // G7 (Dominant)
+    arp: [NOTES.G4, NOTES.B4, NOTES.D5, NOTES.F5] 
+  },
+];
+
+// Ethereal Melody Patterns
+const MELODY_PATTERNS = [
+  [0, 2, 4, 7],    // Ascending Arp
+  [7, 4, 2, 0],    // Descending Arp
+  [0, 4, 7, 12],   // Wide spread
+  [2, 0, 2, 4],    // Simple movement
 ];
 
 let currentChordIndex = 0;
+let currentMelodyPattern = 0;
+let melodyNoteIndex = 0;
+let arpNoteIndex = 0;
 
+// Rich Pad Chord Synthesis
 const playAmbientChord = () => {
   if (!soundEnabled || !musicEnabled || !isMusicPlaying) return;
   
   try {
     const ctx = getAudioContext();
-    const chord = CHORD_PROGRESSION[currentChordIndex];
+    const progression = CHORD_PROGRESSION[currentChordIndex];
     
-    chord.forEach((freq, i) => {
-      const osc = ctx.createOscillator();
+    // Play chord notes with slow attack strings/pad feel
+    progression.chord.forEach((freq, i) => {
+      // 2 oscillators per note for detuned chorus effect
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
       const gain = ctx.createGain();
       const filter = ctx.createBiquadFilter();
+      const panner = ctx.createStereoPanner();
+
+      osc1.type = 'sawtooth';
+      osc2.type = 'triangle';
       
-      osc.type = 'sine';
+      // Slight detuning for warmth
+      osc1.detune.setValueAtTime(-5 + Math.random() * 10, ctx.currentTime);
+      osc2.detune.setValueAtTime(5 + Math.random() * 10, ctx.currentTime);
+
+      // Lowpass filter for "muffled" pad sound, opening up slightly
       filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(800 + i * 200, ctx.currentTime);
-      filter.Q.setValueAtTime(1, ctx.currentTime);
-      
-      const noteVolume = (0.03 + i * 0.01) * musicVolume * masterVolume;
+      filter.frequency.setValueAtTime(400 + i * 200, ctx.currentTime);
+      filter.frequency.linearRampToValueAtTime(600 + i * 200, ctx.currentTime + 3);
+      filter.Q.value = 0.5;
+
+      // Panning for stereo width
+      panner.pan.value = -0.5 + Math.random();
+
+      // Envelope: Slow attack, sustain, slow release
+      const volume = (0.03 + i * 0.005) * musicVolume * masterVolume;
       gain.gain.setValueAtTime(0, ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(noteVolume, ctx.currentTime + 1.5);
-      gain.gain.linearRampToValueAtTime(noteVolume * 0.7, ctx.currentTime + 3);
-      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 4.5);
-      
-      osc.connect(filter);
-      filter.connect(gain);
+      gain.gain.linearRampToValueAtTime(volume, ctx.currentTime + 2); // 2s Attack
+      gain.gain.setValueAtTime(volume, ctx.currentTime + 4); 
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 8); // 4s Release
+
+      osc1.connect(filter);
+      osc2.connect(filter);
+      filter.connect(panner);
+      panner.connect(gain);
       gain.connect(ctx.destination);
-      
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 5);
+
+      osc1.frequency.value = freq;
+      osc2.frequency.value = freq;
+
+      osc1.start(ctx.currentTime);
+      osc2.start(ctx.currentTime);
+      osc1.stop(ctx.currentTime + 8);
+      osc2.stop(ctx.currentTime + 8);
     });
     
     currentChordIndex = (currentChordIndex + 1) % CHORD_PROGRESSION.length;
+    // Change melody pattern occasionally
+    if (Math.random() > 0.7) {
+        currentMelodyPattern = Math.floor(Math.random() * MELODY_PATTERNS.length);
+    }
   } catch (e) {
     console.warn('Background music chord failed:', e);
   }
 };
 
-const playRhythmPulse = () => {
+// Deep Bass Drone
+const playBassNote = () => {
   if (!soundEnabled || !musicEnabled || !isMusicPlaying) return;
   
   try {
     const ctx = getAudioContext();
+    const progression = CHORD_PROGRESSION[currentChordIndex];
+    const bassFreq = progression.bass;
+    
     const osc = ctx.createOscillator();
+    const subOsc = ctx.createOscillator(); // Sub-bass
     const gain = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
     
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(60, ctx.currentTime);
+    osc.type = 'sawtooth';
+    subOsc.type = 'sine';
     
-    const pulseVol = 0.04 * musicVolume * masterVolume;
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(150, ctx.currentTime);
+    
+    const bassVol = 0.15 * musicVolume * masterVolume;
     gain.gain.setValueAtTime(0, ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(pulseVol, ctx.currentTime + 0.05);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+    gain.gain.linearRampToValueAtTime(bassVol, ctx.currentTime + 0.5);
+    gain.gain.linearRampToValueAtTime(bassVol * 0.8, ctx.currentTime + 2);
+    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 4);
     
-    osc.connect(gain);
+    osc.connect(filter);
+    subOsc.connect(filter); // Sub goes through filter too to keep it clean
+    filter.connect(gain);
     gain.connect(ctx.destination);
     
+    osc.frequency.value = bassFreq;
+    subOsc.frequency.value = bassFreq / 2; // Octave lower
+    
     osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.5);
+    subOsc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 4);
+    subOsc.stop(ctx.currentTime + 4);
+  } catch (e) {}
+};
+
+// Crystal / Glass Arpeggio
+const playArpeggioNote = () => {
+  if (!soundEnabled || !musicEnabled || !isMusicPlaying) return;
+  // Reduced density
+  if (Math.random() > 0.8) return;
+
+  try {
+    const ctx = getAudioContext();
+    const progression = CHORD_PROGRESSION[currentChordIndex];
+    // Randomize arp order slightly
+    const arpIdx = (arpNoteIndex + Math.floor(Math.random() * 2)) % progression.arp.length;
+    const arpFreq = progression.arp[arpIdx];
+    
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const pan = ctx.createStereoPanner();
+    
+    // Sine for pure glass sound
+    osc.type = 'sine';
+    
+    pan.pan.value = Math.sin(ctx.currentTime * 2) * 0.5; // Ping-pong
+
+    const arpVol = 0.05 * musicVolume * masterVolume;
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(arpVol, ctx.currentTime + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.5); // Long resonant tail
+    
+    osc.connect(pan);
+    pan.connect(gain);
+    gain.connect(ctx.destination);
+    
+    osc.frequency.value = arpFreq;
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 1.5);
+    
+    arpNoteIndex++;
+  } catch (e) {}
+};
+
+// Lead Melody (rare, distant)
+const playMelodyNote = () => {
+  if (!soundEnabled || !musicEnabled || !isMusicPlaying) return;
+  
+  if (Math.random() > 0.4) return; // Sparse melody
+  
+  try {
+    const ctx = getAudioContext();
+    const progression = CHORD_PROGRESSION[currentChordIndex];
+    const pattern = MELODY_PATTERNS[currentMelodyPattern];
+    const noteOffset = pattern[melodyNoteIndex % pattern.length];
+    
+    // Calculate frequency based on scale (approximated)
+    const baseFreq = progression.arp[1]; // Use a mid-range note as base
+    const melodyFreq = baseFreq * Math.pow(2, noteOffset / 12); // Semitone offset
+    
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+    const delay = ctx.createDelay();
+    const feedback = ctx.createGain();
+    
+    osc.type = 'triangle'; // Flute-like
+    
+    filter.type = 'lowpass';
+    filter.frequency.value = 1200;
+    
+    // Delay line
+    delay.delayTime.value = 0.4;
+    feedback.gain.value = 0.3;
+    
+    const melVol = 0.04 * musicVolume * masterVolume;
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(melVol, ctx.currentTime + 0.1);
+    gain.gain.linearRampToValueAtTime(melVol * 0.8, ctx.currentTime + 0.3);
+    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 2);
+    
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    
+    // Send to delay
+    gain.connect(delay);
+    delay.connect(feedback);
+    feedback.connect(delay);
+    feedback.connect(ctx.destination);
+    
+    osc.frequency.value = melodyFreq;
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 2.5);
+    
+    melodyNoteIndex++;
   } catch (e) {}
 };
 
@@ -152,22 +334,42 @@ export const startBackgroundMusic = (): void => {
   
   isMusicPlaying = true;
   currentChordIndex = 0;
-  playAmbientChord();
+  arpNoteIndex = 0;
+  melodyNoteIndex = 0;
   
+  // Initial Start
+  playAmbientChord();
+  playBassNote();
+  
+  // Schedule loops
+  // Chord change every 6 seconds (Slow, breathing pace)
   bgMusicInterval = window.setInterval(() => {
     playAmbientChord();
-  }, 4000);
+    playBassNote(); // Bass changes with chord
+  }, 6000);
   
-  bgRhythmInterval = window.setInterval(() => {
-    if (isMusicPlaying) playRhythmPulse();
-  }, 2000);
+  // Arpeggios - Faster but sparse
+  bgArpeggioInterval = window.setInterval(() => {
+    if (isMusicPlaying) playArpeggioNote();
+  }, 250); // 1/16th notes approx?
+  
+  // Melody - Slower
+  bgMelodyInterval = window.setInterval(() => {
+    if (isMusicPlaying) playMelodyNote();
+  }, 1000);
 };
 
 export const stopBackgroundMusic = (): void => {
   isMusicPlaying = false;
   if (bgMusicInterval) { clearInterval(bgMusicInterval); bgMusicInterval = null; }
   if (bgRhythmInterval) { clearInterval(bgRhythmInterval); bgRhythmInterval = null; }
+  if (bgArpeggioInterval) { clearInterval(bgArpeggioInterval); bgArpeggioInterval = null; }
+  if (bgMelodyInterval) { clearInterval(bgMelodyInterval); bgMelodyInterval = null; }
+  if (bgBassInterval) { clearInterval(bgBassInterval); bgBassInterval = null; }
 };
+
+// Check if music is currently playing
+export const isBackgroundMusicPlaying = (): boolean => isMusicPlaying;
 
 // ============================================
 // SOUND EFFECT HELPERS

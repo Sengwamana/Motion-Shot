@@ -120,7 +120,13 @@ const GeminiSlingshot: React.FC = () => {
   // Sync music enabled state
   useEffect(() => {
     Sound.setMusicEnabled(musicEnabled);
-  }, [musicEnabled]);
+    // Ensure background music is playing when game starts
+    if (musicEnabled && soundEnabled) {
+      Sound.resumeAudio().then(() => {
+        Sound.startBackgroundMusic();
+      });
+    }
+  }, [musicEnabled, soundEnabled]);
   
   const getBubblePos = (row: number, col: number, width: number) => {
     const xOffset = (width - (GRID_COLS * BUBBLE_RADIUS * 2)) / 2 + BUBBLE_RADIUS;
@@ -690,15 +696,66 @@ const GeminiSlingshot: React.FC = () => {
           drawBubble(ctx, b.x, b.y, BUBBLE_RADIUS - 1, b.color);
       });
 
-      // --- Trajectory Line (Previously Commented Out) ---
-      // Logic removed per request to clean up file, but previously existed here.
+      // --- Trajectory Line (Advanced Prediction) ---
+      if (isPinching.current && !isFlying.current && !isLocked) {
+          const dx = anchorPos.current.x - ballPos.current.x;
+          const dy = anchorPos.current.y - ballPos.current.y;
+          const userStretch = Math.sqrt(dx*dx + dy*dy);
+          
+          if (userStretch > 30) {
+             ctx.save();
+             ctx.beginPath();
+             ctx.moveTo(anchorPos.current.x, anchorPos.current.y);
+             
+             // Simulate path
+             const powerRatio = Math.min(userStretch / MAX_DRAG_DIST, 1.0);
+             const vMult = MIN_FORCE_MULT + (MAX_FORCE_MULT - MIN_FORCE_MULT) * (powerRatio * powerRatio);
+             let simX = anchorPos.current.x;
+             let simY = anchorPos.current.y;
+             let simVx = dx * vMult;
+             let simVy = dy * vMult;
+             
+             // Draw dashed prediction
+             ctx.beginPath();
+             ctx.moveTo(simX, simY);
+             
+             for (let i = 0; i < 60; i++) { // Predict next ~60 frames
+                 simX += simVx;
+                 simY += simVy;
+                 
+                 // Wall Bounce
+                 if (simX < BUBBLE_RADIUS || simX > canvas.width - BUBBLE_RADIUS) {
+                     simVx *= -1;
+                     simX = Math.max(BUBBLE_RADIUS, Math.min(canvas.width - BUBBLE_RADIUS, simX));
+                 }
+                 
+                 // Stop if hitting top or bubbles (simple check)
+                 if (simY < BUBBLE_RADIUS) break;
+                 
+                 ctx.lineTo(simX, simY);
+             }
+             
+             ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+             ctx.lineWidth = 2;
+             ctx.setLineDash([5, 5]);
+             ctx.stroke();
+             
+             // Draw endpoint puck
+             ctx.beginPath();
+             ctx.arc(simX, simY, 4, 0, Math.PI * 2);
+             ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+             ctx.fill();
+             
+             ctx.restore();
+          }
+      }
 
-      // Laser Sight
+      // Laser Sight (AI Hint)
       const currentAimTarget = aimTargetRef.current;
       const thinking = isAiThinkingRef.current;
       const currentSelected = selectedColorRef.current;
       const shouldShowLine = currentAimTarget && !isFlying.current && 
-                             (!aiRecommendedColor || aiRecommendedColor === currentSelected);
+                             (!aiRecommendedColor || aiRecommendedColor === currentSelected) && !isPinching.current;
 
       if (shouldShowLine || thinking) {
           ctx.save();
