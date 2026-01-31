@@ -1,6 +1,6 @@
 {
-  "name": "Copy of Gemini Slingshot",
-  "description": "Gemini 3 Flash is your strategic co-pilot, analyzing the board and suggesting the best shots in this webcam bubble shooter.",
+  "name": "Motion Shot",
+  "description": "AI-powered bubble shooter with hand gesture control. Gemini 3 Flash analyzes the board and suggests strategic shots.",
   "requestFramePermissions": [
     "camera"
   ]

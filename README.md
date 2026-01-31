@@ -1,20 +1,80 @@
 <div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+  <img width="1200" height="475" alt="Motion Shot Banner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+  
+  # 🎯 Motion Shot
+  
+  ### AI-Powered Bubble Shooter with Hand Gesture Control
+  
+  [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+  [![React](https://img.shields.io/badge/React-19.2-61DAFB?logo=react)](https://reactjs.org/)
+  [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript)](https://www.typescriptlang.org/)
+  [![Gemini AI](https://img.shields.io/badge/Gemini-3%20Flash-4285F4?logo=google)](https://ai.google.dev/)
+  
+  [🎮 Play Now](#quick-start) • [📖 Documentation](docs/README.md) • [🤝 Contributing](docs/CONTRIBUTING.md)
 </div>
 
-# Run and deploy your AI Studio app
+---
 
-This contains everything you need to run your app locally.
+## ✨ Features
 
-View your app in AI Studio: https://ai.studio/apps/drive/1HXapk9vamK1-JcoMP-3nMTJVWuSsSQM4
+- **🖐️ Hand Gesture Control** - Use pinch-and-pull gestures via webcam
+- **🧠 AI Strategic Co-pilot** - Gemini 3 Flash analyzes and suggests moves
+- **🎯 Multi-Color Strategy** - 6 bubble colors with varying point values
+- **🎵 Immersive Audio** - Background music and motion sound effects
+- **📊 Real-time Debug Panel** - See AI decision-making process
 
-## Run Locally
+## 🚀 Quick Start
 
-**Prerequisites:**  Node.js
+**Prerequisites:** Node.js 18+, Webcam, Desktop Browser
 
+```bash
+# Install dependencies
+npm install
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+# Configure API key
+cp .env.local.example .env.local
+# Edit .env.local and add your GEMINI_API_KEY from https://aistudio.google.com/app/apikey
+
+# Start the game
+npm run dev
+```
+
+Open `http://localhost:3000` in your browser and allow camera access.
+
+## 🎮 How to Play
+
+1. Show your hand to the webcam
+2. **Pinch** near the slingshot ball
+3. **Pull back** to aim and build power
+4. **Release** to shoot!
+
+Match 3+ bubbles of the same color to pop them. Watch the AI panel for strategic recommendations!
+
+## 📚 Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Full README](docs/README.md) | Complete project documentation |
+| [Architecture](docs/ARCHITECTURE.md) | Technical design & data flow |
+| [API Reference](docs/API_REFERENCE.md) | Type definitions & functions |
+| [Deployment](docs/DEPLOYMENT.md) | Hosting & production guide |
+| [Contributing](docs/CONTRIBUTING.md) | Contribution guidelines |
+
+## 🛠️ Tech Stack
+
+- **React 19** + TypeScript
+- **Vite 6** for blazing-fast dev
+- **MediaPipe Hands** for gesture tracking
+- **Google Gemini 3 Flash** for AI analysis
+- **Tailwind CSS** for styling
+
+## 📄 License
+
+Apache License 2.0 - See [LICENSE](LICENSE)
+
+---
+
+<div align="center">
+  <p>Built with ❤️ using Google Gemini AI</p>
+  <a href="https://ai.studio/apps/drive/1HXapk9vamK1-JcoMP-3nMTJVWuSsSQM4">View in AI Studio</a>
+</div>

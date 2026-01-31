@@ -6,7 +6,8 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { getStrategicHint, TargetCandidate } from '../services/geminiService';
 import { Point, Bubble, Particle, BubbleColor, DebugInfo } from '../types';
-import { Loader2, Trophy, BrainCircuit, Play, MousePointerClick, Eye, Terminal, Clock, AlertTriangle, Target, Lightbulb, Monitor } from 'lucide-react';
+import { Loader2, Trophy, BrainCircuit, Play, MousePointerClick, Eye, Terminal, Clock, AlertTriangle, Target, Lightbulb, Monitor, Volume2, VolumeX } from 'lucide-react';
+import * as Sound from '../services/soundService';
 
 const PINCH_THRESHOLD = 0.05;
 const GRAVITY = 0.0; 
@@ -85,6 +86,15 @@ const GeminiSlingshot: React.FC = () => {
   const [availableColors, setAvailableColors] = useState<BubbleColor[]>([]);
   const [aiRecommendedColor, setAiRecommendedColor] = useState<BubbleColor | null>(null);
   const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [musicEnabled, setMusicEnabled] = useState(true);
+  
+  // Sound tracking refs
+  const lastBounceTime = useRef<number>(0);
+  const wasGrabbing = useRef<boolean>(false);
+  const wasHandVisible = useRef<boolean>(false);
+  const lastStretchSoundTime = useRef<number>(0);
+  const gameStarted = useRef<boolean>(false);
 
   // Sync state to ref
   useEffect(() => {
@@ -98,6 +108,19 @@ const GeminiSlingshot: React.FC = () => {
   useEffect(() => {
     isAiThinkingRef.current = isAiThinking;
   }, [isAiThinking]);
+
+  // Sync sound enabled state
+  useEffect(() => {
+    Sound.setSoundEnabled(soundEnabled);
+    if (!soundEnabled) {
+      Sound.stopBackgroundMusic();
+    }
+  }, [soundEnabled]);
+
+  // Sync music enabled state
+  useEffect(() => {
+    Sound.setMusicEnabled(musicEnabled);
+  }, [musicEnabled]);
   
   const getBubblePos = (row: number, col: number, width: number) => {
     const xOffset = (width - (GRID_COLS * BUBBLE_RADIUS * 2)) / 2 + BUBBLE_RADIUS;
@@ -275,6 +298,10 @@ const GeminiSlingshot: React.FC = () => {
       const multiplier = matches.length > 3 ? 1.5 : 1.0;
       scoreRef.current += Math.floor(points * multiplier);
       setScore(scoreRef.current);
+      
+      // Play pop sound with combo info
+      Sound.playPopSound(matches.length);
+      
       return true;
     }
     return false;
@@ -300,6 +327,9 @@ const GeminiSlingshot: React.FC = () => {
     setAiRationale(null);
     setAiRecommendedColor(null);
     setAimTarget(null);
+    
+    // Play AI thinking sound
+    Sound.playAiThinkingSound();
 
     // Client-Side Pre-Calc for ALL colors
     const allClusters = getAllReachableClusters();
@@ -324,6 +354,9 @@ const GeminiSlingshot: React.FC = () => {
             }
             const pos = getBubblePos(hint.targetRow, hint.targetCol, canvasWidth);
             setAimTarget(pos);
+            
+            // Play AI hint sound on successful analysis
+            Sound.playAiHintSound();
         }
         
         // Unlock
@@ -387,6 +420,12 @@ const GeminiSlingshot: React.FC = () => {
     const onResults = (results: any) => {
       setLoading(false);
       
+      // Start game sound and music on first frame
+      if (!gameStarted.current) {
+        gameStarted.current = true;
+        Sound.playGameStartSound();
+      }
+      
       // Responsive Resize
       if (canvas.width !== container.clientWidth || canvas.height !== container.clientHeight) {
         canvas.width = container.clientWidth;
@@ -409,8 +448,17 @@ const GeminiSlingshot: React.FC = () => {
       // --- Hand Tracking ---
       let handPos: Point | null = null;
       let pinchDist = 1.0;
+      const handVisible = results.multiHandLandmarks && results.multiHandLandmarks.length > 0;
 
-      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+      // Hand detection sound
+      if (handVisible && !wasHandVisible.current) {
+        Sound.playHandDetectedSound();
+      } else if (!handVisible && wasHandVisible.current) {
+        Sound.playHandLostSound();
+      }
+      wasHandVisible.current = handVisible;
+
+      if (handVisible) {
         const landmarks = results.multiHandLandmarks[0];
         const idxTip = landmarks[8];
         const thumbTip = landmarks[4];
@@ -447,6 +495,8 @@ const GeminiSlingshot: React.FC = () => {
         const distToBall = Math.sqrt(Math.pow(handPos.x - ballPos.current.x, 2) + Math.pow(handPos.y - ballPos.current.y, 2));
         if (!isPinching.current && distToBall < 100) {
            isPinching.current = true;
+           // Play grab sound
+           Sound.playGrabSound();
         }
         
         if (isPinching.current) {
@@ -454,6 +504,19 @@ const GeminiSlingshot: React.FC = () => {
             const dragDx = ballPos.current.x - anchorPos.current.x;
             const dragDy = ballPos.current.y - anchorPos.current.y;
             const dragDist = Math.sqrt(dragDx*dragDx + dragDy*dragDy);
+            
+            // Play stretch sound feedback (throttled)
+            const now = performance.now();
+            if (now - lastStretchSoundTime.current > 100 && dragDist > 20) {
+                const stretchRatio = Math.min(dragDist / MAX_DRAG_DIST, 1.0);
+                Sound.playStretchSound(stretchRatio);
+                lastStretchSoundTime.current = now;
+                
+                // Play max tension sound at full stretch
+                if (stretchRatio > 0.95) {
+                    Sound.playMaxTensionSound();
+                }
+            }
             
             if (dragDist > MAX_DRAG_DIST) {
                 const angle = Math.atan2(dragDy, dragDx);
@@ -484,6 +547,10 @@ const GeminiSlingshot: React.FC = () => {
                     x: dx * velocityMultiplier,
                     y: dy * velocityMultiplier
                 };
+                
+                // Play launch sound
+                Sound.playLaunchSound();
+                Sound.startFlyingSound();
             } else {
                 ballPos.current = { ...anchorPos.current };
             }
@@ -501,6 +568,7 @@ const GeminiSlingshot: React.FC = () => {
         // Infinite bounce safeguard: if flying for more than 5 seconds (5000ms), cancel shot
         if (performance.now() - flightStartTime.current > 5000) {
             isFlying.current = false;
+            Sound.stopFlyingSound();
             ballPos.current = { ...anchorPos.current };
             ballVel.current = { x: 0, y: 0 };
         } else {
@@ -515,6 +583,13 @@ const GeminiSlingshot: React.FC = () => {
                 if (ballPos.current.x < BUBBLE_RADIUS || ballPos.current.x > canvas.width - BUBBLE_RADIUS) {
                     ballVel.current.x *= -1;
                     ballPos.current.x = Math.max(BUBBLE_RADIUS, Math.min(canvas.width - BUBBLE_RADIUS, ballPos.current.x));
+                    
+                    // Play bounce sound (throttled to avoid spam)
+                    const now = performance.now();
+                    if (now - lastBounceTime.current > 100) {
+                        Sound.playBounceSound();
+                        lastBounceTime.current = now;
+                    }
                 }
 
                 if (ballPos.current.y < BUBBLE_RADIUS) {
@@ -542,6 +617,7 @@ const GeminiSlingshot: React.FC = () => {
 
             if (collisionOccurred) {
                 isFlying.current = false;
+                Sound.stopFlyingSound();
                 
                 let bestDist = Infinity;
                 let bestRow = 0;
@@ -581,8 +657,13 @@ const GeminiSlingshot: React.FC = () => {
                     active: true
                 };
                 bubbles.current.push(newBubble);
-                checkMatches(newBubble);
+                const matched = checkMatches(newBubble);
                 updateAvailableColors();
+                
+                // Play snap sound if no match occurred
+                if (!matched) {
+                    Sound.playSnapSound();
+                }
                 
                 // Reset shot
                 ballPos.current = { ...anchorPos.current };
@@ -594,6 +675,7 @@ const GeminiSlingshot: React.FC = () => {
             
             if (ballPos.current.y > canvas.height) {
                 isFlying.current = false;
+                Sound.stopFlyingSound();
                 ballPos.current = { ...anchorPos.current };
                 ballVel.current = { x: 0, y: 0 };
             }
@@ -820,7 +902,7 @@ const GeminiSlingshot: React.FC = () => {
         )}
 
         {/* HUD: Score Card */}
-        <div className="absolute top-6 left-6 z-40">
+        <div className="absolute top-6 left-6 z-40 flex gap-3">
             <div className="bg-[#1e1e1e] p-5 rounded-[28px] border border-[#444746] shadow-2xl flex items-center gap-4 min-w-[180px]">
                 <div className="bg-[#42a5f5]/20 p-3 rounded-full">
                     <Trophy className="w-6 h-6 text-[#42a5f5]" />
@@ -830,6 +912,35 @@ const GeminiSlingshot: React.FC = () => {
                     <p className="text-3xl font-bold text-white">{score.toLocaleString()}</p>
                 </div>
             </div>
+            
+            {/* Sound Toggle Button */}
+            <button
+                onClick={() => {
+                    setSoundEnabled(!soundEnabled);
+                    Sound.resumeAudio();
+                }}
+                className="bg-[#1e1e1e] p-4 rounded-full border border-[#444746] shadow-2xl hover:bg-[#2a2a2a] transition-colors"
+                title={soundEnabled ? 'Mute sounds' : 'Enable sounds'}
+            >
+                {soundEnabled ? (
+                    <Volume2 className="w-6 h-6 text-[#66bb6a]" />
+                ) : (
+                    <VolumeX className="w-6 h-6 text-[#ef5350]" />
+                )}
+            </button>
+            
+            {/* Music Toggle Button */}
+            <button
+                onClick={() => {
+                    setMusicEnabled(!musicEnabled);
+                    Sound.resumeAudio();
+                }}
+                className={`bg-[#1e1e1e] p-4 rounded-full border border-[#444746] shadow-2xl hover:bg-[#2a2a2a] transition-colors ${!soundEnabled ? 'opacity-50' : ''}`}
+                title={musicEnabled ? 'Mute music' : 'Enable music'}
+                disabled={!soundEnabled}
+            >
+                <span className={`text-lg ${musicEnabled && soundEnabled ? 'text-[#ab47bc]' : 'text-[#757575]'}`}>🎵</span>
+            </button>
         </div>
 
         {/* HUD: Color Picker */}
@@ -847,7 +958,11 @@ const GeminiSlingshot: React.FC = () => {
                         return (
                             <button
                                 key={color}
-                                onClick={() => setSelectedColor(color)}
+                                onClick={() => {
+                                    setSelectedColor(color);
+                                    Sound.playSelectSound();
+                                    Sound.resumeAudio(); // Resume audio context on user interaction
+                                }}
                                 className={`relative w-14 h-14 rounded-full transition-all duration-300 transform flex items-center justify-center
                                     ${isSelected ? 'scale-110 ring-4 ring-white/50 z-10' : 'opacity-80 hover:opacity-100 hover:scale-105'}
                                 `}
