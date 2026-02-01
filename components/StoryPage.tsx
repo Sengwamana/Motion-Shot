@@ -177,10 +177,22 @@ const StoryPage: React.FC<StoryPageProps> = ({ onContinue }) => {
         if (p.x < -10) p.x = canvas.width + 10;
         if (p.x > canvas.width + 10) p.x = -10;
 
-        // Draw particle with glow
+        // Draw particle with glow - convert hex to rgb for proper alpha support
+        const hexToRgb = (hex: string) => {
+          const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+          return result ? {
+            r: parseInt(result[1], 16),
+            g: parseInt(result[2], 16),
+            b: parseInt(result[3], 16)
+          } : { r: 255, g: 255, b: 255 };
+        };
+        
+        const rgb = hexToRgb(chapter.theme.primary);
+        const safeAlpha = Math.max(0, Math.min(1, p.alpha));
+        
         const gradient = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size * 3);
-        gradient.addColorStop(0, `rgba(255, 255, 255, ${p.alpha})`);
-        gradient.addColorStop(0.5, `${chapter.theme.primary}${Math.floor(p.alpha * 80).toString(16).padStart(2, '0')}`);
+        gradient.addColorStop(0, `rgba(255, 255, 255, ${safeAlpha})`);
+        gradient.addColorStop(0.5, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${safeAlpha * 0.5})`);
         gradient.addColorStop(1, 'transparent');
         
         ctx.fillStyle = gradient;
@@ -189,13 +201,23 @@ const StoryPage: React.FC<StoryPageProps> = ({ onContinue }) => {
         ctx.fill();
       });
 
-      // Ambient light rays
+      // Ambient light rays - use rgba for proper color format
+      const hexToRgbRay = (hex: string) => {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? {
+          r: parseInt(result[1], 16),
+          g: parseInt(result[2], 16),
+          b: parseInt(result[3], 16)
+        } : { r: 255, g: 255, b: 255 };
+      };
+      const rayRgb = hexToRgbRay(chapter.theme.primary);
+      
       const rayCount = 3;
       for (let i = 0; i < rayCount; i++) {
         const x = canvas.width * (0.2 + i * 0.3) + Math.sin(time * 0.0005 + i) * 100;
         const gradient = ctx.createLinearGradient(x, 0, x + 200, canvas.height);
-        gradient.addColorStop(0, `${chapter.theme.primary}08`);
-        gradient.addColorStop(0.5, `${chapter.theme.primary}03`);
+        gradient.addColorStop(0, `rgba(${rayRgb.r}, ${rayRgb.g}, ${rayRgb.b}, 0.03)`);
+        gradient.addColorStop(0.5, `rgba(${rayRgb.r}, ${rayRgb.g}, ${rayRgb.b}, 0.01)`);
         gradient.addColorStop(1, 'transparent');
         
         ctx.fillStyle = gradient;
