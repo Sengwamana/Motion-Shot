@@ -8,7 +8,6 @@
   [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
   [![React](https://img.shields.io/badge/React-19.2-61DAFB?logo=react)](https://reactjs.org/)
   [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript)](https://www.typescriptlang.org/)
-  [![Gemini AI](https://img.shields.io/badge/Gemini-3%20Flash-4285F4?logo=google)](https://ai.google.dev/)
   
   [🎮 Play Now](#quick-start) • [📖 Documentation](docs/README.md) • [🤝 Contributing](docs/CONTRIBUTING.md)
 </div>
@@ -18,7 +17,7 @@
 ## ✨ Features
 
 - **🖐️ Hand Gesture Control** - Use pinch-and-pull gestures via webcam
-- **🧠 AI Strategic Co-pilot** - Gemini 3 Flash analyzes and suggests moves
+- **🧠 AI Strategic Co-pilot** - Analyzes and suggests optimal moves
 - **🎯 Multi-Color Strategy** - 6 bubble colors with varying point values
 - **🎵 Immersive Audio** - Background music and motion sound effects
 - **📊 Real-time Debug Panel** - See AI decision-making process
@@ -33,7 +32,7 @@ npm install
 
 # Configure API key
 cp .env.local.example .env.local
-# Edit .env.local and add your GEMINI_API_KEY from https://aistudio.google.com/app/apikey
+# Edit .env.local and add your API key
 
 # Start the game
 npm run dev
@@ -65,7 +64,7 @@ Match 3+ bubbles of the same color to pop them. Watch the AI panel for strategic
 - **React 19** + TypeScript
 - **Vite 6** for blazing-fast dev
 - **MediaPipe Hands** for gesture tracking
-- **Google Gemini 3 Flash** for AI analysis
+- **AI Co-pilot** for strategic analysis
 - **Tailwind CSS** for styling
 
 ## 📄 License
@@ -75,6 +74,5 @@ Apache License 2.0 - See [LICENSE](LICENSE)
 ---
 
 <div align="center">
-  <p>Built with ❤️ using Google Gemini AI</p>
-  <a href="https://ai.studio/apps/drive/1HXapk9vamK1-JcoMP-3nMTJVWuSsSQM4">View in AI Studio</a>
+  <p>Motion Shot ❤️</p>
 </div>
