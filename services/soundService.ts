@@ -235,6 +235,39 @@ const playBassNote = () => {
   } catch (e) {}
 };
 
+// Subtle Rhythm Pulse (Heartbeat) - Adds driving force
+const playRhythmPulse = () => {
+  if (!soundEnabled || !musicEnabled || !isMusicPlaying) return;
+  
+  try {
+    const ctx = getAudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+    
+    // Very low sine kick
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(60, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(30, ctx.currentTime + 0.1);
+    
+    filter.type = 'lowpass';
+    filter.frequency.value = 150;
+    
+    // Quick thud
+    const vol = 0.15 * musicVolume * masterVolume;
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(vol, ctx.currentTime + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+    
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.2);
+  } catch (e) {}
+};
+
 // Crystal / Glass Arpeggio
 const playArpeggioNote = () => {
   if (!soundEnabled || !musicEnabled || !isMusicPlaying) return;
@@ -353,6 +386,11 @@ export const startBackgroundMusic = (): void => {
     if (isMusicPlaying) playArpeggioNote();
   }, 250); // 1/16th notes approx?
   
+  // Rhythm Pulse - Steady beat (every 2 sec)
+  bgRhythmInterval = window.setInterval(() => {
+    if (isMusicPlaying) playRhythmPulse();
+  }, 2000); // Heartbeat pace
+
   // Melody - Slower
   bgMelodyInterval = window.setInterval(() => {
     if (isMusicPlaying) playMelodyNote();

@@ -71,6 +71,9 @@ const GeminiSlingshot: React.FC = () => {
   
   // AI Request Trigger
   const captureRequestRef = useRef<boolean>(false);
+  
+  // Touch/Mouse Input State
+  const pointerState = useRef<{ x: number, y: number, active: boolean }>({ x: 0, y: 0, active: false });
 
   // Current active color (Ref for loop, State for UI)
   const selectedColorRef = useRef<BubbleColor>('red');
@@ -451,12 +454,15 @@ const GeminiSlingshot: React.FC = () => {
       ctx.fillStyle = 'rgba(18, 18, 18, 0.85)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // --- Hand Tracking ---
-      let handPos: Point | null = null;
+      // --- INPUT HANDLING (Hand + Touch/Mouse) ---
+      let inputPos: Point | null = null;
       let pinchDist = 1.0;
-      const handVisible = results.multiHandLandmarks && results.multiHandLandmarks.length > 0;
+      const isInputActive = isPinching.current; // Track if we are currently holding
 
-      // Hand detection sound
+      // 1. Hand Tracking Input
+      const handVisible = results.multiHandLandmarks && results.multiHandLandmarks.length > 0;
+      
+      // Hand detected sound logic
       if (handVisible && !wasHandVisible.current) {
         Sound.playHandDetectedSound();
       } else if (!handVisible && wasHandVisible.current) {
@@ -469,7 +475,7 @@ const GeminiSlingshot: React.FC = () => {
         const idxTip = landmarks[8];
         const thumbTip = landmarks[4];
 
-        handPos = {
+        inputPos = {
           x: (idxTip.x * canvas.width + thumbTip.x * canvas.width) / 2,
           y: (idxTip.y * canvas.height + thumbTip.y * canvas.height) / 2
         };
@@ -479,17 +485,32 @@ const GeminiSlingshot: React.FC = () => {
         pinchDist = Math.sqrt(dx * dx + dy * dy);
 
         if (window.drawConnectors && window.drawLandmarks) {
-           // Google Blue for tracking lines
            window.drawConnectors(ctx, landmarks, window.HAND_CONNECTIONS, {color: '#669df6', lineWidth: 1});
            window.drawLandmarks(ctx, landmarks, {color: '#aecbfa', lineWidth: 1, radius: 2});
         }
         
-        // Cursor
         ctx.beginPath();
-        ctx.arc(handPos.x, handPos.y, 20, 0, Math.PI * 2);
+        ctx.arc(inputPos.x, inputPos.y, 20, 0, Math.PI * 2);
         ctx.strokeStyle = pinchDist < PINCH_THRESHOLD ? '#66bb6a' : '#ffffff';
         ctx.lineWidth = 2;
         ctx.stroke();
+      }
+
+      // 2. Touch/Mouse Override
+      // If no hand is visible (or even if it is, but user touches screen), allow touch
+      // We check the global 'pointerPosRef' which we'll add to the component scope
+      if (pointerState.current.active) {
+          inputPos = { ...pointerState.current };
+          pinchDist = 0; // Touch is always a "pinch"
+          
+          // Visual indicator for touch
+          ctx.beginPath();
+          ctx.arc(inputPos.x, inputPos.y, 30, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([5, 5]);
+          ctx.stroke();
+          ctx.setLineDash([]);
       }
       
       // --- SLINGSHOT LOGIC ---
@@ -497,8 +518,8 @@ const GeminiSlingshot: React.FC = () => {
       // Check if we are currently "Locked" waiting for AI
       const isLocked = isAiThinkingRef.current;
 
-      if (!isLocked && handPos && pinchDist < PINCH_THRESHOLD && !isFlying.current) {
-        const distToBall = Math.sqrt(Math.pow(handPos.x - ballPos.current.x, 2) + Math.pow(handPos.y - ballPos.current.y, 2));
+      if (!isLocked && inputPos && pinchDist < PINCH_THRESHOLD && !isFlying.current) {
+        const distToBall = Math.sqrt(Math.pow(inputPos.x - ballPos.current.x, 2) + Math.pow(inputPos.y - ballPos.current.y, 2));
         if (!isPinching.current && distToBall < 100) {
            isPinching.current = true;
            // Play grab sound
@@ -506,7 +527,7 @@ const GeminiSlingshot: React.FC = () => {
         }
         
         if (isPinching.current) {
-            ballPos.current = { x: handPos.x, y: handPos.y };
+            ballPos.current = { x: inputPos.x, y: inputPos.y };
             const dragDx = ballPos.current.x - anchorPos.current.x;
             const dragDy = ballPos.current.y - anchorPos.current.y;
             const dragDist = Math.sqrt(dragDx*dragDx + dragDy*dragDy);
@@ -531,7 +552,7 @@ const GeminiSlingshot: React.FC = () => {
             }
         }
       } 
-      else if (isPinching.current && (!handPos || pinchDist >= PINCH_THRESHOLD || isLocked)) {
+      else if (isPinching.current && (!inputPos || pinchDist >= PINCH_THRESHOLD || isLocked)) {
         // Release or Forced Release if Locked
         isPinching.current = false;
         
@@ -919,23 +940,44 @@ const GeminiSlingshot: React.FC = () => {
   return (
     <div className="flex w-full h-screen bg-[#121212] overflow-hidden font-roboto text-[#e3e3e3]">
       
-      {/* MOBILE/TABLET BLOCKER OVERLAY */}
-      <div className="fixed inset-0 z-[100] bg-[#121212] flex flex-col items-center justify-center p-8 text-center md:hidden">
-         <Monitor className="w-16 h-16 text-[#ef5350] mb-6 animate-pulse" />
-         <h2 className="text-2xl font-bold text-[#e3e3e3] mb-4">Desktop View Required</h2>
-         <p className="text-[#c4c7c5] max-w-md text-lg leading-relaxed">
-           This experience requires a larger screen for the webcam tracking and game mechanics.
-         </p>
-         <div className="mt-8 flex items-center gap-2 text-sm text-[#757575] uppercase tracking-wider font-bold">
-           <div className="w-2 h-2 bg-[#42a5f5] rounded-full"></div>
-           Please maximize window
-         </div>
-      </div>
+
 
       {/* LEFT: Game Area */}
-      <div ref={gameContainerRef} className="flex-1 relative h-full overflow-hidden">
+      <div ref={gameContainerRef} className="flex-1 relative h-full overflow-hidden touch-none">
         <video ref={videoRef} className="absolute hidden" playsInline />
-        <canvas ref={canvasRef} className="absolute inset-0" />
+        <canvas 
+            ref={canvasRef} 
+            className="absolute inset-0 touch-none cursor-crosshair"
+            onPointerDown={(e) => {
+                e.preventDefault();
+                const rect = canvasRef.current?.getBoundingClientRect();
+                if (rect) {
+                    pointerState.current = { 
+                        x: e.clientX - rect.left, 
+                        y: e.clientY - rect.top, 
+                        active: true 
+                    };
+                }
+            }}
+            onPointerMove={(e) => {
+                e.preventDefault();
+                if (pointerState.current.active) {
+                    const rect = canvasRef.current?.getBoundingClientRect();
+                    if (rect) {
+                        pointerState.current.x = e.clientX - rect.left;
+                        pointerState.current.y = e.clientY - rect.top;
+                    }
+                }
+            }}
+            onPointerUp={(e) => {
+                e.preventDefault();
+                pointerState.current.active = false;
+            }}
+            onPointerLeave={(e) => {
+                e.preventDefault();
+                pointerState.current.active = false;
+            }}
+        />
 
         {/* Loading Overlay */}
         {loading && (
