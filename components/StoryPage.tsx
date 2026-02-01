@@ -2,26 +2,121 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  * 
- * Story Page Component - "From Stones to Gestures: A Story of Play Across Time"
+ * Story Page Component - Professional Game Introduction
+ * "From Stones to Gestures: A Story of Play Across Time"
  */
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { ChevronDown, Hand, Flame, Monitor, Gamepad2, Sparkles, ArrowRight, Clock, Heart, Target, Zap } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Zap, Play, Volume2, VolumeX } from 'lucide-react';
 import * as Sound from '../services/soundService';
 
 interface StoryPageProps {
   onContinue: () => void;
 }
 
+// Story chapters data
+const CHAPTERS = [
+  {
+    id: 0,
+    chapter: 'PROLOGUE',
+    title: 'The Dawn of Play',
+    quote: '"Long time ago, before electricity, before screens..."',
+    description: 'People played using only their bodies, their minds, and nature. The hand was the main tool — to throw, to aim, to defend, and to survive.',
+    visual: '🪨',
+    theme: {
+      primary: '#D97706',
+      secondary: '#92400E',
+      bg: 'from-amber-950/95 via-stone-950/98 to-black',
+      accent: 'amber',
+    },
+  },
+  {
+    id: 1,
+    chapter: 'CHAPTER I',
+    title: 'Lessons of Fire',
+    quote: '"Every movement mattered..."',
+    description: 'Children threw stones to hit targets. Warriors trained their hands and eyes. Games were lessons of life — teaching focus, patience, and skill.',
+    visual: '🔥',
+    theme: {
+      primary: '#EA580C',
+      secondary: '#9A3412',
+      bg: 'from-orange-950/95 via-stone-950/98 to-black',
+      accent: 'orange',
+    },
+  },
+  {
+    id: 2,
+    chapter: 'CHAPTER II',
+    title: 'The Forgetting',
+    quote: '"Something was slowly lost..."',
+    description: 'Games moved from fields to boards, then to screens. Buttons replaced hands. Controllers replaced movement. The natural connection faded.',
+    visual: '📺',
+    theme: {
+      primary: '#6B7280',
+      secondary: '#374151',
+      bg: 'from-slate-950/95 via-gray-950/98 to-black',
+      accent: 'gray',
+    },
+  },
+  {
+    id: 3,
+    chapter: 'CHAPTER III',
+    title: 'The Return',
+    quote: '"Technology comes full circle..."',
+    description: 'With hand-motion control, the hand becomes the interface again. No buttons. No weapons. Just gestures — pinch, pull, and release.',
+    visual: '✋',
+    theme: {
+      primary: '#8B5CF6',
+      secondary: '#6D28D9',
+      bg: 'from-purple-950/95 via-indigo-950/98 to-black',
+      accent: 'purple',
+    },
+  },
+  {
+    id: 4,
+    chapter: 'EPILOGUE',
+    title: 'Your Journey Begins',
+    quote: '"The hand that shaped history now shapes the future..."',
+    description: 'This is not just a game. It is a bridge between ancient wisdom and modern technology. The power returns to your hands.',
+    visual: '🎯',
+    theme: {
+      primary: '#EC4899',
+      secondary: '#BE185D',
+      bg: 'from-pink-950/95 via-purple-950/98 to-black',
+      accent: 'pink',
+    },
+    isFinal: true,
+  },
+];
+
 const StoryPage: React.FC<StoryPageProps> = ({ onContinue }) => {
-  const [currentSection, setCurrentSection] = useState(0);
-  const [scrollProgress, setScrollProgress] = useState(0);
+  const [currentChapter, setCurrentChapter] = useState(0);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [direction, setDirection] = useState<'next' | 'prev'>('next');
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [musicEnabled, setMusicEnabled] = useState(true);
+  const [audioInitialized, setAudioInitialized] = useState(false);
+  const [showContent, setShowContent] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>();
 
-  // Particle system for ambient effects
+  // Initialize audio
+  const initializeAudio = useCallback(async () => {
+    if (audioInitialized) return;
+    try {
+      await Sound.resumeAudio();
+      Sound.setSoundEnabled(true);
+      Sound.setMusicEnabled(musicEnabled);
+      if (musicEnabled) {
+        Sound.startBackgroundMusic();
+      }
+      setAudioInitialized(true);
+    } catch (e) {
+      console.warn('Audio init failed:', e);
+    }
+  }, [audioInitialized, musicEnabled]);
+
+  // Cinematic particle system
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -36,7 +131,7 @@ const StoryPage: React.FC<StoryPageProps> = ({ onContinue }) => {
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
 
-    // Particles representing different eras
+    // Cinematic dust particles
     const particles: Array<{
       x: number;
       y: number;
@@ -44,74 +139,74 @@ const StoryPage: React.FC<StoryPageProps> = ({ onContinue }) => {
       vy: number;
       size: number;
       alpha: number;
-      type: 'stone' | 'ember' | 'pixel' | 'glow';
+      decay: number;
     }> = [];
 
-    // Initialize particles
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < 100; i++) {
       particles.push({
         x: Math.random() * canvas.width,
         y: Math.random() * canvas.height,
         vx: (Math.random() - 0.5) * 0.3,
-        vy: (Math.random() - 0.5) * 0.3 - 0.2,
-        size: Math.random() * 4 + 2,
-        alpha: Math.random() * 0.5 + 0.2,
-        type: ['stone', 'ember', 'pixel', 'glow'][Math.floor(Math.random() * 4)] as any,
+        vy: -Math.random() * 0.5 - 0.1,
+        size: Math.random() * 2 + 0.5,
+        alpha: Math.random() * 0.4,
+        decay: Math.random() * 0.002 + 0.001,
       });
     }
 
     let time = 0;
+    const chapter = CHAPTERS[currentChapter];
+    
     const animate = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // Cinematic letterbox fade
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.03)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       particles.forEach((p) => {
-        p.x += p.vx;
+        p.x += p.vx + Math.sin(time * 0.001 + p.y * 0.01) * 0.1;
         p.y += p.vy;
-        p.alpha = 0.2 + 0.3 * Math.sin(time * 0.02 + p.x * 0.01);
+        
+        // Fade in/out based on position
+        const yRatio = p.y / canvas.height;
+        p.alpha = Math.sin(yRatio * Math.PI) * 0.3;
 
-        // Wrap around
+        if (p.y < -10) {
+          p.y = canvas.height + 10;
+          p.x = Math.random() * canvas.width;
+        }
         if (p.x < -10) p.x = canvas.width + 10;
         if (p.x > canvas.width + 10) p.x = -10;
-        if (p.y < -10) p.y = canvas.height + 10;
-        if (p.y > canvas.height + 10) p.y = -10;
 
-        // Draw based on type
-        ctx.globalAlpha = p.alpha;
-        switch (p.type) {
-          case 'stone':
-            ctx.fillStyle = '#8B7355';
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-            ctx.fill();
-            break;
-          case 'ember':
-            const gradient = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size * 2);
-            gradient.addColorStop(0, '#FF6B35');
-            gradient.addColorStop(0.5, '#F7931E');
-            gradient.addColorStop(1, 'transparent');
-            ctx.fillStyle = gradient;
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, p.size * 2, 0, Math.PI * 2);
-            ctx.fill();
-            break;
-          case 'pixel':
-            ctx.fillStyle = '#00FF88';
-            ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
-            break;
-          case 'glow':
-            const glowGrad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size * 3);
-            glowGrad.addColorStop(0, '#A78BFA');
-            glowGrad.addColorStop(0.5, '#6366F1');
-            glowGrad.addColorStop(1, 'transparent');
-            ctx.fillStyle = glowGrad;
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, p.size * 3, 0, Math.PI * 2);
-            ctx.fill();
-            break;
-        }
+        // Draw particle with glow
+        const gradient = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size * 3);
+        gradient.addColorStop(0, `rgba(255, 255, 255, ${p.alpha})`);
+        gradient.addColorStop(0.5, `${chapter.theme.primary}${Math.floor(p.alpha * 80).toString(16).padStart(2, '0')}`);
+        gradient.addColorStop(1, 'transparent');
+        
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * 3, 0, Math.PI * 2);
+        ctx.fill();
       });
 
-      ctx.globalAlpha = 1;
+      // Ambient light rays
+      const rayCount = 3;
+      for (let i = 0; i < rayCount; i++) {
+        const x = canvas.width * (0.2 + i * 0.3) + Math.sin(time * 0.0005 + i) * 100;
+        const gradient = ctx.createLinearGradient(x, 0, x + 200, canvas.height);
+        gradient.addColorStop(0, `${chapter.theme.primary}08`);
+        gradient.addColorStop(0.5, `${chapter.theme.primary}03`);
+        gradient.addColorStop(1, 'transparent');
+        
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x + 200, canvas.height);
+        ctx.lineTo(x - 100, canvas.height);
+        ctx.lineTo(x - 50, 0);
+        ctx.fill();
+      }
+
       time++;
       animationRef.current = requestAnimationFrame(animate);
     };
@@ -121,33 +216,30 @@ const StoryPage: React.FC<StoryPageProps> = ({ onContinue }) => {
       window.removeEventListener('resize', resizeCanvas);
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
-  }, []);
+  }, [currentChapter]);
 
-  // Handle scroll
+  // Show content with delay for cinematic effect
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+    setShowContent(false);
+    const timer = setTimeout(() => setShowContent(true), 300);
+    return () => clearTimeout(timer);
+  }, [currentChapter]);
 
-    const handleScroll = () => {
-      const scrollTop = container.scrollTop;
-      const scrollHeight = container.scrollHeight - container.clientHeight;
-      const progress = scrollTop / scrollHeight;
-      setScrollProgress(progress);
+  // Navigate chapters
+  const goToChapter = useCallback((index: number, dir: 'next' | 'prev') => {
+    if (isAnimating || index < 0 || index >= CHAPTERS.length) return;
+    
+    setIsAnimating(true);
+    setDirection(dir);
+    Sound.playUIClickSound();
+    
+    setTimeout(() => {
+      setCurrentChapter(index);
+      setTimeout(() => setIsAnimating(false), 600);
+    }, 400);
+  }, [isAnimating]);
 
-      // Determine current section
-      const sectionCount = 5;
-      const newSection = Math.min(Math.floor(progress * sectionCount), sectionCount - 1);
-      if (newSection !== currentSection) {
-        setCurrentSection(newSection);
-        Sound.playUIClickSound();
-      }
-    };
-
-    container.addEventListener('scroll', handleScroll);
-    return () => container.removeEventListener('scroll', handleScroll);
-  }, [currentSection]);
-
-  // Handle continue
+  // Handle continue to game
   const handleContinue = useCallback(async () => {
     if (isTransitioning) return;
     setIsTransitioning(true);
@@ -155,413 +247,333 @@ const StoryPage: React.FC<StoryPageProps> = ({ onContinue }) => {
     await Sound.resumeAudio();
     Sound.playGameStartSound();
     
-    setTimeout(() => {
-      onContinue();
-    }, 800);
+    setTimeout(() => onContinue(), 1000);
   }, [onContinue, isTransitioning]);
 
-  // Section backgrounds based on era
-  const getSectionBackground = (index: number) => {
-    switch (index) {
-      case 0: return 'from-amber-950/90 via-stone-900/80 to-stone-950/90'; // Ancient
-      case 1: return 'from-orange-950/90 via-amber-900/80 to-stone-950/90'; // Fire/Village
-      case 2: return 'from-slate-900/90 via-gray-800/80 to-slate-950/90'; // Industrial
-      case 3: return 'from-indigo-950/90 via-purple-900/80 to-slate-950/90'; // Modern
-      case 4: return 'from-purple-950/90 via-indigo-900/80 to-blue-950/90'; // Future
-      default: return 'from-slate-900/90 via-gray-900/80 to-slate-950/90';
-    }
-  };
+  // Toggle music
+  const toggleMusic = useCallback(async () => {
+    await Sound.resumeAudio();
+    const newState = !musicEnabled;
+    setMusicEnabled(newState);
+    Sound.setMusicEnabled(newState);
+    if (newState) Sound.startBackgroundMusic();
+    else Sound.stopBackgroundMusic();
+    Sound.playUIClickSound();
+    setAudioInitialized(true);
+  }, [musicEnabled]);
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight' || e.key === ' ') {
+        if (currentChapter < CHAPTERS.length - 1) goToChapter(currentChapter + 1, 'next');
+        else if (CHAPTERS[currentChapter].isFinal) handleContinue();
+      } else if (e.key === 'ArrowLeft' && currentChapter > 0) {
+        goToChapter(currentChapter - 1, 'prev');
+      } else if (e.key === 'Enter' && CHAPTERS[currentChapter].isFinal) {
+        handleContinue();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentChapter, goToChapter, handleContinue]);
+
+  const chapter = CHAPTERS[currentChapter];
 
   return (
-    <div className="fixed inset-0 bg-black overflow-hidden">
-      {/* Animated Background Canvas */}
-      <canvas 
-        ref={canvasRef} 
-        className="fixed inset-0 z-0 opacity-40"
-      />
+    <div 
+      className={`fixed inset-0 bg-gradient-to-b ${chapter.theme.bg} overflow-hidden transition-all duration-1000`}
+      onClick={initializeAudio}
+    >
+      {/* Cinematic Canvas */}
+      <canvas ref={canvasRef} className="fixed inset-0 z-0" />
 
-      {/* Dynamic gradient overlay based on section */}
-      <div 
-        className={`fixed inset-0 z-5 bg-gradient-to-b ${getSectionBackground(currentSection)} transition-all duration-1000`}
-      />
+      {/* Cinematic Letterbox */}
+      <div className="fixed top-0 left-0 right-0 h-16 sm:h-20 bg-gradient-to-b from-black to-transparent z-20 pointer-events-none" />
+      <div className="fixed bottom-0 left-0 right-0 h-16 sm:h-20 bg-gradient-to-t from-black to-transparent z-20 pointer-events-none" />
 
-      {/* Progress indicator */}
-      <div className="fixed right-6 top-1/2 -translate-y-1/2 z-50 flex flex-col gap-3">
-        {[0, 1, 2, 3, 4].map((i) => (
-          <div
-            key={i}
-            className={`
-              w-2 h-8 rounded-full transition-all duration-500
-              ${currentSection >= i 
-                ? 'bg-gradient-to-b from-amber-400 via-purple-500 to-blue-400 shadow-lg shadow-purple-500/30' 
-                : 'bg-white/20'
-              }
-            `}
-          />
-        ))}
+      {/* Vignette */}
+      <div className="fixed inset-0 z-10 pointer-events-none" style={{
+        background: 'radial-gradient(ellipse 80% 60% at 50% 50%, transparent 0%, rgba(0,0,0,0.7) 100%)',
+      }} />
+
+      {/* Film Grain Overlay */}
+      <div className="fixed inset-0 z-30 pointer-events-none opacity-[0.03]" style={{
+        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
+      }} />
+
+      {/* Top Bar - Game Title & Audio */}
+      <div className="fixed top-0 left-0 right-0 z-40 px-6 sm:px-10 py-6 flex justify-between items-center">
+        <div className="flex items-center gap-4">
+          {/* Game Logo */}
+          <div className="flex flex-col">
+            <span className="text-xs font-mono tracking-[0.3em] text-white/40 uppercase">Experience</span>
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight">
+              <span className="text-white">MOTION</span>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500"> SHOT</span>
+            </h1>
+          </div>
+        </div>
+
+        {/* Audio Toggle */}
+        <button
+          onClick={toggleMusic}
+          className="p-3 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all group"
+        >
+          {musicEnabled ? (
+            <Volume2 className="w-5 h-5 text-white/70 group-hover:text-white" />
+          ) : (
+            <VolumeX className="w-5 h-5 text-white/40 group-hover:text-white/70" />
+          )}
+        </button>
       </div>
 
-      {/* Scroll container */}
-      <div 
-        ref={containerRef}
-        className="relative z-10 h-full overflow-y-auto overflow-x-hidden scroll-smooth snap-y snap-mandatory"
-        style={{ scrollbarWidth: 'none' }}
-      >
-        {/* Section 1: Opening - Long Time Ago */}
-        <section className="min-h-screen snap-start flex items-center justify-center px-6 py-20 relative">
-          <div className="max-w-4xl mx-auto text-center">
-            {/* Ancient symbol */}
-            <div className="mb-8 animate-fadeIn">
-              <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-amber-800/50 to-stone-900/50 border-2 border-amber-600/30 shadow-2xl">
-                <span className="text-4xl">🪨</span>
-              </div>
-            </div>
-
-            <h1 className="text-3xl sm:text-5xl md:text-6xl font-serif font-light text-amber-100 mb-6 animate-fadeInUp leading-tight">
-              From Stones to Gestures
-            </h1>
-            <p className="text-lg sm:text-xl text-amber-300/80 font-serif italic mb-8 animate-fadeInUp" style={{ animationDelay: '200ms' }}>
-              A Story of Play Across Time
-            </p>
-
-            <div className="h-px w-32 mx-auto bg-gradient-to-r from-transparent via-amber-500/50 to-transparent mb-12" />
-
-            <div className="space-y-6 text-amber-100/70 text-base sm:text-lg leading-relaxed max-w-2xl mx-auto animate-fadeInUp" style={{ animationDelay: '400ms' }}>
-              <p className="flex items-center justify-center gap-3">
-                <Clock className="w-5 h-5 text-amber-500/70" />
-                <span className="font-serif italic text-amber-400">Long time ago…</span>
-              </p>
-              <p>
-                Before electricity, before screens, and before machines could understand humans, 
-                <span className="text-amber-300"> people played using only their bodies, their minds, and nature.</span>
-              </p>
-            </div>
-
-            {/* Scroll indicator */}
-            <div className="absolute bottom-10 left-1/2 -translate-x-1/2 animate-bounce">
-              <ChevronDown className="w-8 h-8 text-amber-400/50" />
-            </div>
-          </div>
-        </section>
-
-        {/* Section 2: Ancient Games */}
-        <section className="min-h-screen snap-start flex items-center justify-center px-6 py-20 relative">
-          <div className="max-w-4xl mx-auto">
-            <div className="grid md:grid-cols-2 gap-12 items-center">
-              {/* Visual side */}
-              <div className="relative order-2 md:order-1">
-                <div className="aspect-square rounded-full bg-gradient-to-br from-orange-900/30 via-amber-800/20 to-transparent p-8 border border-amber-700/20">
-                  <div className="w-full h-full rounded-full bg-gradient-to-br from-orange-800/40 to-amber-900/30 flex items-center justify-center relative overflow-hidden">
-                    {/* Fire glow effect */}
-                    <div className="absolute inset-0 animate-pulse">
-                      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-32 h-40 bg-gradient-to-t from-orange-500/30 via-amber-500/20 to-transparent rounded-full blur-xl" />
-                    </div>
-                    <div className="text-center relative z-10">
-                      <Flame className="w-16 h-16 text-orange-400 mx-auto mb-4 animate-flicker" />
-                      <div className="flex items-center justify-center gap-4 mt-4">
-                        <span className="text-4xl">🎯</span>
-                        <span className="text-4xl">🪃</span>
-                        <span className="text-4xl">🏹</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Text side */}
-              <div className="space-y-6 order-1 md:order-2">
-                <h2 className="text-2xl sm:text-4xl font-serif text-amber-200 leading-tight">
-                  In villages and ancient communities
-                </h2>
-                <div className="space-y-4 text-amber-100/70 text-base sm:text-lg leading-relaxed">
-                  <p>
-                    Games were <span className="text-amber-300 font-medium">simple but meaningful.</span> Children threw stones to hit a target, 
-                    elders practiced spear throwing for hunting, and warriors trained their hands and eyes to protect their people.
-                  </p>
-                  <div className="p-4 border-l-2 border-orange-500/50 bg-orange-950/30 rounded-r-lg">
-                    <p className="text-orange-200 italic">
-                      "Every movement mattered. The hand was the main tool — 
-                      to throw, to aim, to defend, and to survive."
-                    </p>
-                  </div>
-                  <p>
-                    Games were not just for fun; they were <span className="text-amber-300 font-medium">lessons of life,</span> teaching focus, patience, and skill.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Section 3: Around the Fire */}
-        <section className="min-h-screen snap-start flex items-center justify-center px-6 py-20 relative">
-          <div className="max-w-4xl mx-auto text-center">
-            {/* Campfire scene */}
-            <div className="mb-12 relative">
-              <div className="inline-flex items-center justify-center">
-                <div className="relative">
-                  <span className="text-6xl sm:text-8xl">🔥</span>
-                  <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-24 h-4 bg-orange-500/30 rounded-full blur-lg" />
-                </div>
-              </div>
+      {/* Main Content Area */}
+      <div className="relative z-20 h-full flex items-center justify-center px-6 sm:px-12 lg:px-20">
+        <div className="w-full max-w-6xl mx-auto grid lg:grid-cols-2 gap-8 lg:gap-16 items-center">
+          
+          {/* Left Side - Visual */}
+          <div 
+            className={`
+              relative flex items-center justify-center order-1
+              transition-all duration-700 ease-out
+              ${isAnimating ? 'opacity-0 scale-90' : 'opacity-100 scale-100'}
+              ${showContent ? 'translate-y-0' : 'translate-y-8'}
+            `}
+          >
+            {/* Visual Container */}
+            <div className="relative">
+              {/* Glow Ring */}
+              <div 
+                className="absolute inset-0 rounded-full blur-3xl opacity-30 animate-pulse"
+                style={{ background: `radial-gradient(circle, ${chapter.theme.primary}, transparent 70%)` }}
+              />
               
-              {/* Sitting figures */}
-              <div className="flex justify-center gap-8 mt-4 opacity-60">
-                <span className="text-2xl transform -scale-x-100">👤</span>
-                <span className="text-2xl">👤</span>
-                <span className="text-2xl transform -scale-x-100">👤</span>
-              </div>
-            </div>
-
-            <blockquote className="text-xl sm:text-2xl md:text-3xl font-serif text-amber-200 italic leading-relaxed max-w-3xl mx-auto mb-8">
-              "Around the fire at night, stories were told about great hunters who never missed their target, 
-              and young players dreamed of mastering the same hand movements one day."
-            </blockquote>
-
-            <div className="h-px w-48 mx-auto bg-gradient-to-r from-transparent via-orange-500/30 to-transparent mb-12" />
-
-            <div className="flex items-center justify-center gap-3 text-gray-400">
-              <div className="w-2 h-2 rounded-full bg-gray-500" />
-              <span className="text-sm font-mono tracking-widest uppercase">Time passed...</span>
-              <div className="w-2 h-2 rounded-full bg-gray-500" />
-            </div>
-          </div>
-        </section>
-
-        {/* Section 4: The Change */}
-        <section className="min-h-screen snap-start flex items-center justify-center px-6 py-20 relative">
-          <div className="max-w-4xl mx-auto">
-            <div className="grid md:grid-cols-2 gap-12 items-center">
-              {/* Text side */}
-              <div className="space-y-6">
-                <h2 className="text-2xl sm:text-4xl font-serif text-gray-200 leading-tight">
-                  Civilizations grew. <br />Tools became smarter.
-                </h2>
-                <div className="space-y-4 text-gray-300/70 text-base sm:text-lg leading-relaxed">
-                  <p>
-                    Games moved from <span className="text-gray-200">fields to boards,</span> then from <span className="text-gray-200">boards to screens.</span>
-                  </p>
-                  <div className="flex items-center gap-3 py-4">
-                    <div className="flex items-center gap-2">
-                      <Hand className="w-5 h-5 text-amber-500" />
-                      <ArrowRight className="w-4 h-4 text-gray-500" />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Gamepad2 className="w-5 h-5 text-blue-500" />
-                      <ArrowRight className="w-4 h-4 text-gray-500" />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Monitor className="w-5 h-5 text-purple-500" />
-                    </div>
-                  </div>
-                  <p className="text-gray-400">
-                    Buttons replaced hands. Controllers replaced movement.
-                  </p>
-                  <p className="text-lg text-gray-300">
-                    People played more — <span className="text-red-400/80">but moved less.</span>
-                  </p>
-                </div>
+              {/* Main Visual */}
+              <div 
+                className="relative w-48 h-48 sm:w-64 sm:h-64 lg:w-80 lg:h-80 rounded-full flex items-center justify-center"
+                style={{
+                  background: `linear-gradient(135deg, ${chapter.theme.secondary}40, transparent)`,
+                  boxShadow: `0 0 80px ${chapter.theme.primary}20, inset 0 0 60px ${chapter.theme.primary}10`,
+                }}
+              >
+                <div 
+                  className="absolute inset-2 rounded-full border opacity-30"
+                  style={{ borderColor: chapter.theme.primary }}
+                />
+                <div 
+                  className="absolute inset-6 rounded-full border opacity-20"
+                  style={{ borderColor: chapter.theme.primary }}
+                />
+                
+                {/* Icon */}
+                <span className="text-7xl sm:text-8xl lg:text-9xl filter drop-shadow-2xl transform hover:scale-110 transition-transform duration-500">
+                  {chapter.visual}
+                </span>
               </div>
 
-              {/* Visual side */}
-              <div className="relative">
-                <div className="p-6 bg-gradient-to-br from-slate-800/50 to-slate-900/50 rounded-xl border border-slate-700/30">
-                  <div className="aspect-video bg-slate-900 rounded-lg flex items-center justify-center relative overflow-hidden">
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,_rgba(99,102,241,0.1),_transparent_70%)]" />
-                    <div className="text-center z-10">
-                      <Monitor className="w-16 h-16 text-slate-600 mx-auto mb-4" />
-                      <div className="flex items-center justify-center gap-2 text-slate-500">
-                        <div className="w-8 h-8 rounded bg-slate-700 flex items-center justify-center text-xs">⬆️</div>
-                        <div className="w-8 h-8 rounded bg-slate-700 flex items-center justify-center text-xs">⬇️</div>
-                        <div className="w-8 h-8 rounded bg-slate-700 flex items-center justify-center text-xs">A</div>
-                        <div className="w-8 h-8 rounded bg-slate-700 flex items-center justify-center text-xs">B</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Warning message */}
-                <div className="mt-6 p-4 bg-red-950/30 border border-red-800/30 rounded-lg">
-                  <p className="text-red-300/80 text-sm italic text-center">
-                    "Something important was slowly forgotten: <br />
-                    <span className="text-red-200 font-medium">the natural connection between the human body and play.</span>"
-                  </p>
-                </div>
-              </div>
+              {/* Orbiting particles */}
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  className="absolute w-2 h-2 rounded-full"
+                  style={{
+                    background: chapter.theme.primary,
+                    boxShadow: `0 0 10px ${chapter.theme.primary}`,
+                    top: '50%',
+                    left: '50%',
+                    animation: `orbit ${8 + i * 2}s linear infinite`,
+                    animationDelay: `${i * -2}s`,
+                  }}
+                />
+              ))}
             </div>
           </div>
-        </section>
 
-        {/* Section 5: Nowadays - The Return */}
-        <section className="min-h-screen snap-start flex items-center justify-center px-6 py-20 relative">
-          <div className="max-w-5xl mx-auto text-center">
-            <div className="mb-8">
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-purple-500/20 border border-purple-500/30">
-                <Sparkles className="w-4 h-4 text-purple-400" />
-                <span className="text-sm font-mono text-purple-300 tracking-wider uppercase">Nowadays</span>
-              </div>
+          {/* Right Side - Text Content */}
+          <div 
+            className={`
+              order-2 text-center lg:text-left
+              transition-all duration-700 ease-out delay-100
+              ${isAnimating ? 'opacity-0 translate-x-8' : 'opacity-100 translate-x-0'}
+              ${showContent ? 'translate-y-0' : 'translate-y-8'}
+            `}
+          >
+            {/* Chapter Label */}
+            <div className="inline-flex items-center gap-3 mb-4">
+              <div className="h-px w-8 bg-gradient-to-r from-transparent" style={{ background: `linear-gradient(to right, transparent, ${chapter.theme.primary})` }} />
+              <span 
+                className="text-xs sm:text-sm font-mono tracking-[0.4em] uppercase"
+                style={{ color: chapter.theme.primary }}
+              >
+                {chapter.chapter}
+              </span>
+              <div className="h-px w-8" style={{ background: `linear-gradient(to left, transparent, ${chapter.theme.primary})` }} />
             </div>
 
-            <h2 className="text-3xl sm:text-5xl md:text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-blue-400 to-cyan-400 mb-8 leading-tight">
-              Technology has come full circle.
+            {/* Title */}
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-bold text-white mb-6 leading-tight tracking-tight">
+              {chapter.title}
             </h2>
 
-            <div className="max-w-3xl mx-auto space-y-8 mb-12">
-              <p className="text-lg sm:text-xl text-gray-300 leading-relaxed">
-                With <span className="text-purple-300 font-medium">hand-motion shooting,</span> the hand becomes the controller again.
-              </p>
-              
-              <div className="flex items-center justify-center gap-4 text-2xl">
-                <span className="opacity-50 line-through text-gray-500">🎮</span>
-                <span className="opacity-50 line-through text-gray-500">⌨️</span>
-                <ArrowRight className="w-6 h-6 text-purple-500" />
-                <span className="text-4xl animate-pulse">✋</span>
-              </div>
+            {/* Quote */}
+            <p 
+              className="text-lg sm:text-xl lg:text-2xl font-serif italic mb-6 leading-relaxed"
+              style={{ color: `${chapter.theme.primary}` }}
+            >
+              {chapter.quote}
+            </p>
 
-              <p className="text-gray-400 text-lg">
-                No buttons. No weapons. <span className="text-purple-300">Just gestures.</span>
-              </p>
+            {/* Description */}
+            <p className="text-base sm:text-lg text-white/60 leading-relaxed mb-8 max-w-xl mx-auto lg:mx-0">
+              {chapter.description}
+            </p>
 
-              {/* Gesture demonstration */}
-              <div className="p-6 bg-gradient-to-br from-purple-900/30 via-indigo-900/20 to-blue-900/30 rounded-2xl border border-purple-500/20 backdrop-blur-sm">
-                <div className="flex items-center justify-center gap-8 text-center">
-                  <div className="flex flex-col items-center gap-2">
-                    <span className="text-4xl">🤏</span>
-                    <span className="text-xs text-gray-400 font-mono">PINCH</span>
+            {/* Final Chapter - Play Button */}
+            {chapter.isFinal && (
+              <div 
+                className={`
+                  transition-all duration-500 delay-300
+                  ${showContent ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}
+                `}
+              >
+                <button
+                  onClick={handleContinue}
+                  disabled={isTransitioning}
+                  className={`
+                    group relative px-10 sm:px-14 py-4 sm:py-5 font-bold text-base sm:text-lg tracking-wider
+                    transition-all duration-300 transform
+                    ${isTransitioning ? 'scale-95' : 'hover:scale-105 active:scale-95'}
+                  `}
+                >
+                  {/* Button Glow */}
+                  <div 
+                    className="absolute -inset-1 rounded-xl blur-xl opacity-50 group-hover:opacity-80 transition-opacity"
+                    style={{ background: `linear-gradient(135deg, ${chapter.theme.primary}, ${chapter.theme.secondary})` }}
+                  />
+                  
+                  {/* Button Background */}
+                  <div 
+                    className="absolute inset-0 rounded-xl"
+                    style={{ background: `linear-gradient(135deg, ${chapter.theme.primary}, ${chapter.theme.secondary})` }}
+                  />
+                  
+                  {/* Button Border */}
+                  <div className="absolute inset-0 rounded-xl border border-white/20" />
+
+                  {/* Button Content */}
+                  <div className="relative flex items-center gap-3 text-white">
+                    {isTransitioning ? (
+                      <>
+                        <Zap className="w-5 h-5 animate-spin" />
+                        <span>INITIALIZING</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-5 h-5 fill-current" />
+                        <span>PLAY NOW</span>
+                      </>
+                    )}
                   </div>
-                  <ArrowRight className="w-5 h-5 text-purple-500/50" />
-                  <div className="flex flex-col items-center gap-2">
-                    <span className="text-4xl">✊</span>
-                    <span className="text-xs text-gray-400 font-mono">PULL</span>
-                  </div>
-                  <ArrowRight className="w-5 h-5 text-purple-500/50" />
-                  <div className="flex flex-col items-center gap-2">
-                    <span className="text-4xl">🖐️</span>
-                    <span className="text-xs text-gray-400 font-mono">RELEASE</span>
-                  </div>
-                </div>
-                <p className="mt-4 text-purple-300/70 text-sm italic">
-                  Just like throwing a stone long ago...
+                </button>
+
+                <p className="mt-4 text-white/30 text-sm font-mono">
+                  Press ENTER or click to begin
                 </p>
               </div>
-
-              <p className="text-gray-400 leading-relaxed">
-                But now, the target is digital. The playground is virtual. 
-                And the <span className="text-blue-300">screen understands the human body.</span>
-              </p>
-            </div>
-
-            {/* The Message */}
-            <div className="max-w-2xl mx-auto mb-12 p-8 bg-gradient-to-br from-indigo-950/50 to-purple-950/50 rounded-2xl border border-indigo-500/20">
-              <Heart className="w-8 h-8 text-pink-500 mx-auto mb-4" />
-              <h3 className="text-2xl font-bold text-white mb-4">The Message</h3>
-              <p className="text-gray-300 leading-relaxed mb-4">
-                This is not just a game. It is a <span className="text-purple-300 font-medium">bridge between the past and the present.</span>
-              </p>
-              <p className="text-gray-400 text-sm">
-                From traditional hand-based play to modern hand-motion shooting, 
-                we see that technology did not replace humanity — <span className="text-blue-300">it returned power to it.</span>
-              </p>
-            </div>
-
-            {/* Final statement */}
-            <div className="mb-12">
-              <p className="text-xl sm:text-2xl font-serif text-gray-200 italic">
-                "The hand that once shaped history <br />
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 font-bold not-italic">
-                  is now shaping the future of gaming.
-                </span>"
-              </p>
-            </div>
-
-            {/* Continue Button */}
-            <button
-              onClick={handleContinue}
-              disabled={isTransitioning}
-              className={`
-                group relative px-12 py-5 font-bold text-lg tracking-wider
-                transition-all duration-500 transform
-                ${isTransitioning ? 'scale-95 opacity-70' : 'hover:scale-105'}
-              `}
-            >
-              {/* Button background */}
-              <div className="absolute inset-0 bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 rounded-xl opacity-90 group-hover:opacity-100 transition-opacity" />
-              <div className="absolute inset-0 bg-gradient-to-r from-purple-400 via-indigo-400 to-blue-400 rounded-xl opacity-0 group-hover:opacity-30 blur-xl transition-opacity" />
-              
-              {/* Corner accents */}
-              <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-white/50 rounded-tl-lg" />
-              <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-white/50 rounded-br-lg" />
-
-              {/* Content */}
-              <div className="relative flex items-center gap-4 text-white">
-                {isTransitioning ? (
-                  <>
-                    <Zap className="w-5 h-5 animate-spin" />
-                    <span>LOADING...</span>
-                  </>
-                ) : (
-                  <>
-                    <Hand className="w-5 h-5" />
-                    <span>BEGIN YOUR JOURNEY</span>
-                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                  </>
-                )}
-              </div>
-            </button>
-
-            <p className="mt-6 text-gray-500 text-sm">
-              Experience the connection between ancient play and modern technology
-            </p>
+            )}
           </div>
-        </section>
+        </div>
       </div>
 
-      {/* Skip button */}
+      {/* Bottom Navigation */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 px-6 sm:px-10 py-6">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
+          
+          {/* Left - Prev Button */}
+          <button
+            onClick={() => goToChapter(currentChapter - 1, 'prev')}
+            disabled={currentChapter === 0 || isAnimating}
+            className={`
+              flex items-center gap-2 px-4 py-2 rounded-lg transition-all
+              ${currentChapter === 0 
+                ? 'text-white/20 cursor-not-allowed' 
+                : 'text-white/60 hover:text-white hover:bg-white/10'
+              }
+            `}
+          >
+            <ArrowLeft className="w-5 h-5" />
+            <span className="hidden sm:inline text-sm font-medium">Previous</span>
+          </button>
+
+          {/* Center - Progress */}
+          <div className="flex items-center gap-3">
+            {CHAPTERS.map((c, i) => (
+              <button
+                key={i}
+                onClick={() => goToChapter(i, i > currentChapter ? 'next' : 'prev')}
+                disabled={isAnimating}
+                className="group relative p-1"
+              >
+                <div 
+                  className={`
+                    h-1 rounded-full transition-all duration-500
+                    ${currentChapter === i ? 'w-8 sm:w-12' : 'w-2 sm:w-3'}
+                  `}
+                  style={{ 
+                    background: currentChapter >= i 
+                      ? `linear-gradient(to right, ${CHAPTERS[i].theme.primary}, ${CHAPTERS[Math.min(i+1, CHAPTERS.length-1)].theme.primary})`
+                      : 'rgba(255,255,255,0.2)'
+                  }}
+                />
+                
+                {/* Tooltip */}
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-black/80 rounded text-[10px] text-white/70 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                  {c.chapter}
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* Right - Next Button */}
+          <button
+            onClick={() => {
+              if (currentChapter < CHAPTERS.length - 1) goToChapter(currentChapter + 1, 'next');
+              else handleContinue();
+            }}
+            disabled={isAnimating}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-all"
+          >
+            <span className="hidden sm:inline text-sm font-medium">
+              {currentChapter === CHAPTERS.length - 1 ? 'Play' : 'Next'}
+            </span>
+            <ArrowRight className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Skip Button */}
       <button
         onClick={handleContinue}
-        className="fixed top-6 right-6 z-50 px-4 py-2 text-sm text-gray-400 hover:text-white border border-gray-700 hover:border-gray-500 rounded-lg backdrop-blur-sm transition-all hover:bg-white/5"
+        className="fixed bottom-6 right-6 z-50 px-3 py-1.5 text-xs text-white/30 hover:text-white/60 transition-colors"
       >
-        Skip Story →
+        Skip →
       </button>
+
+      {/* Keyboard Hints */}
+      <div className="fixed bottom-6 left-6 z-50 hidden sm:flex items-center gap-4 text-white/20 text-xs">
+        <span className="flex items-center gap-1">
+          <kbd className="px-1.5 py-0.5 bg-white/10 rounded text-[10px]">←</kbd>
+          <kbd className="px-1.5 py-0.5 bg-white/10 rounded text-[10px]">→</kbd>
+          <span className="ml-1">Navigate</span>
+        </span>
+      </div>
 
       {/* CSS Animations */}
       <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        
-        @keyframes fadeInUp {
-          from { 
-            opacity: 0; 
-            transform: translateY(30px); 
-          }
-          to { 
-            opacity: 1; 
-            transform: translateY(0); 
-          }
-        }
-        
-        @keyframes flicker {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.8; transform: scale(0.95); }
-        }
-        
-        .animate-fadeIn {
-          animation: fadeIn 1s ease-out both;
-        }
-        
-        .animate-fadeInUp {
-          animation: fadeInUp 1s ease-out both;
-        }
-        
-        .animate-flicker {
-          animation: flicker 2s ease-in-out infinite;
-        }
-        
-        /* Hide scrollbar but keep functionality */
-        ::-webkit-scrollbar {
-          display: none;
+        @keyframes orbit {
+          from { transform: translate(-50%, -50%) rotate(0deg) translateX(120px) rotate(0deg); }
+          to { transform: translate(-50%, -50%) rotate(360deg) translateX(120px) rotate(-360deg); }
         }
       `}</style>
     </div>
