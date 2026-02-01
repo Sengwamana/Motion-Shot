@@ -453,18 +453,59 @@ const GameLauncher: React.FC<GameLauncherProps> = ({ onStartGame }) => {
                   <InstructionItem 
                     icon="✋"
                     title="Hand Tracking"
-                    description="Use pinch gesture (thumb + index) to engage mechanics."
+                    description="Use pinch gesture (thumb + index) or touch/mouse to aim."
                   />
                   <InstructionItem 
                     icon="🎯"
                     title="Targeting"
-                    description="Pull back to adjust tension and trajectory."
+                    description="Pull back to charge power. Watch the power gauge!"
                   />
                   <InstructionItem 
                     icon="🚀"
                     title="Launch"
-                    description="Release pinch to fire projectile."
+                    description="Release to fire. Match 3+ same-colored bubbles!"
                   />
+                  <InstructionItem 
+                    icon="🔥"
+                    title="Combos"
+                    description="Chain matches within 3s for combo multipliers!"
+                  />
+                  <InstructionItem 
+                    icon="🤖"
+                    title="AI Assist"
+                    description="Follow Gemini's suggestions for strategic shots."
+                  />
+                </div>
+                
+                {/* Scoring Info */}
+                <div className="mt-4 pt-4 border-t border-white/10">
+                  <h4 className="text-xs text-blue-400 font-bold mb-2 uppercase tracking-wider">Point Values</h4>
+                  <div className="grid grid-cols-3 gap-2 text-[10px]">
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 rounded-full bg-red-400" />
+                      <span className="text-gray-400">100 pts</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 rounded-full bg-blue-400" />
+                      <span className="text-gray-400">150 pts</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 rounded-full bg-green-400" />
+                      <span className="text-gray-400">200 pts</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 rounded-full bg-yellow-400" />
+                      <span className="text-gray-400">250 pts</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 rounded-full bg-purple-400" />
+                      <span className="text-gray-400">300 pts</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 rounded-full bg-orange-400" />
+                      <span className="text-gray-400">500 pts</span>
+                    </div>
+                  </div>
                 </div>
              </div>
           </div>

@@ -70,14 +70,14 @@ let bgMelodyInterval: number | null = null;
 let bgBassInterval: number | null = null;
 let isMusicPlaying = false;
 
-// Musical notes (frequencies in Hz) - Expanded range
-const NOTES = {
-  C1: 32.70, D1: 36.71, E1: 41.20, F1: 43.65, G1: 49.00, A1: 55.00, B1: 61.74,
-  C2: 65.41, D2: 73.42, E2: 82.41, F2: 87.31, G2: 98.00, A2: 110.00, B2: 123.47,
-  C3: 130.81, D3: 146.83, E3: 164.81, F3: 174.61, G3: 196.00, A3: 220.00, B3: 246.94,
-  C4: 261.63, D4: 293.66, E4: 329.63, F4: 349.23, G4: 392.00, A4: 440.00, B4: 493.88,
-  C5: 523.25, D5: 587.33, E5: 659.25, F5: 698.46, G5: 783.99, A5: 880.00, B5: 987.77,
-  C6: 1046.50, D6: 1174.66, E6: 1318.51,
+// Musical notes (frequencies in Hz) - Expanded range with sharps/flats
+const NOTES: Record<string, number> = {
+  C1: 32.70, Db1: 34.65, D1: 36.71, Eb1: 38.89, E1: 41.20, F1: 43.65, Gb1: 46.25, G1: 49.00, Ab1: 51.91, A1: 55.00, Bb1: 58.27, B1: 61.74,
+  C2: 65.41, Db2: 69.30, D2: 73.42, Eb2: 77.78, E2: 82.41, F2: 87.31, Gb2: 92.50, G2: 98.00, Ab2: 103.83, A2: 110.00, Bb2: 116.54, B2: 123.47,
+  C3: 130.81, Db3: 138.59, D3: 146.83, Eb3: 155.56, E3: 164.81, F3: 174.61, Gb3: 185.00, G3: 196.00, Ab3: 207.65, A3: 220.00, Bb3: 233.08, B3: 246.94,
+  C4: 261.63, Db4: 277.18, D4: 293.66, Eb4: 311.13, E4: 329.63, F4: 349.23, Gb4: 369.99, G4: 392.00, Ab4: 415.30, A4: 440.00, Bb4: 466.16, B4: 493.88,
+  C5: 523.25, Db5: 554.37, D5: 587.33, Eb5: 622.25, E5: 659.25, F5: 698.46, Gb5: 739.99, G5: 783.99, Ab5: 830.61, A5: 880.00, Bb5: 932.33, B5: 987.77,
+  C6: 1046.50, Db6: 1108.73, D6: 1174.66, Eb6: 1244.51, E6: 1318.51,
 };
 
 // Cinematic / Sci-Fi Chord Progression (F minor / Ab Major feel)
@@ -139,6 +139,12 @@ const playAmbientChord = () => {
     
     // Play chord notes with slow attack strings/pad feel
     progression.chord.forEach((freq, i) => {
+      // Validate frequency is a finite number
+      if (!Number.isFinite(freq) || freq <= 0) {
+        console.warn('Invalid frequency in chord:', freq);
+        return;
+      }
+      
       // 2 oscillators per note for detuned chorus effect
       const osc1 = ctx.createOscillator();
       const osc2 = ctx.createOscillator();
@@ -202,6 +208,12 @@ const playBassNote = () => {
     const ctx = getAudioContext();
     const progression = CHORD_PROGRESSION[currentChordIndex];
     const bassFreq = progression.bass;
+    
+    // Validate bass frequency
+    if (!Number.isFinite(bassFreq) || bassFreq <= 0) {
+      console.warn('Invalid bass frequency:', bassFreq);
+      return;
+    }
     
     const osc = ctx.createOscillator();
     const subOsc = ctx.createOscillator(); // Sub-bass
@@ -281,6 +293,11 @@ const playArpeggioNote = () => {
     const arpIdx = (arpNoteIndex + Math.floor(Math.random() * 2)) % progression.arp.length;
     const arpFreq = progression.arp[arpIdx];
     
+    // Validate arp frequency
+    if (!Number.isFinite(arpFreq) || arpFreq <= 0) {
+      return;
+    }
+    
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     const pan = ctx.createStereoPanner();
@@ -321,6 +338,12 @@ const playMelodyNote = () => {
     
     // Calculate frequency based on scale (approximated)
     const baseFreq = progression.arp[1]; // Use a mid-range note as base
+    
+    // Validate base frequency before calculation
+    if (!Number.isFinite(baseFreq) || baseFreq <= 0) {
+      return;
+    }
+    
     const melodyFreq = baseFreq * Math.pow(2, noteOffset / 12); // Semitone offset
     
     const osc = ctx.createOscillator();

@@ -92,12 +92,41 @@ const GeminiSlingshot: React.FC = () => {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [musicEnabled, setMusicEnabled] = useState(true);
   
+  // Enhanced UX States
+  const [comboCount, setComboCount] = useState(0);
+  const [maxCombo, setMaxCombo] = useState(0);
+  const [lastScoreGain, setLastScoreGain] = useState<{ points: number; x: number; y: number; combo: number } | null>(null);
+  const [screenShake, setScreenShake] = useState(0);
+  const [powerLevel, setPowerLevel] = useState(0);
+  const [shotsRemaining, setShotsRemaining] = useState(50);
+  const [level, setLevel] = useState(1);
+  const [levelMessage, setLevelMessage] = useState<string | null>(null);
+  const [gameStatus, setGameStatus] = useState<'playing' | 'won' | 'lost'>('playing');
+  const [perfectShot, setPerfectShot] = useState(false);
+  const [floatingScores, setFloatingScores] = useState<Array<{ id: number; points: number; x: number; y: number; combo: number; color: string }>>([]);
+  
+  // Pull & Release UX States
+  const [isPulling, setIsPulling] = useState(false);
+  const [releaseFlash, setReleaseFlash] = useState(false);
+  const [pullAngle, setPullAngle] = useState(0);
+  const [showPullHint, setShowPullHint] = useState(true);
+  const [pullVibration, setPullVibration] = useState(0);
+  const [ballTrail, setBallTrail] = useState<Array<{x: number, y: number, age: number}>>([]);
+  
   // Sound tracking refs
   const lastBounceTime = useRef<number>(0);
   const wasGrabbing = useRef<boolean>(false);
   const wasHandVisible = useRef<boolean>(false);
   const lastStretchSoundTime = useRef<number>(0);
   const gameStarted = useRef<boolean>(false);
+  
+  // Combo/UX refs
+  const comboRef = useRef<number>(0);
+  const comboResetTimer = useRef<NodeJS.Timeout | null>(null);
+  const floatingScoreId = useRef<number>(0);
+  const lastMatchTime = useRef<number>(0);
+  const ballTrailRef = useRef<Array<{x: number, y: number, age: number}>>([]);
+  const lastTrailUpdate = useRef<number>(0);
 
   // Sync state to ref
   useEffect(() => {
@@ -295,21 +324,112 @@ const GeminiSlingshot: React.FC = () => {
     }
 
     if (matches.length >= 3) {
+      const now = performance.now();
+      const timeSinceLastMatch = now - lastMatchTime.current;
+      
+      // Update combo - if match within 3 seconds, increase combo
+      if (timeSinceLastMatch < 3000 && comboRef.current > 0) {
+        comboRef.current++;
+      } else {
+        comboRef.current = 1;
+      }
+      lastMatchTime.current = now;
+      
+      // Update max combo
+      if (comboRef.current > maxCombo) {
+        setMaxCombo(comboRef.current);
+      }
+      setComboCount(comboRef.current);
+      
+      // Clear previous combo reset timer
+      if (comboResetTimer.current) {
+        clearTimeout(comboResetTimer.current);
+      }
+      // Set new combo reset timer
+      comboResetTimer.current = setTimeout(() => {
+        comboRef.current = 0;
+        setComboCount(0);
+      }, 3000);
+      
       let points = 0;
       const basePoints = COLOR_CONFIG[targetColor].points;
       
+      // Calculate center position for floating score
+      let centerX = 0, centerY = 0;
       matches.forEach(b => {
         b.active = false;
         createExplosion(b.x, b.y, COLOR_CONFIG[b.color].hex);
         points += basePoints;
+        centerX += b.x;
+        centerY += b.y;
       });
-      // Combo Multiplier
-      const multiplier = matches.length > 3 ? 1.5 : 1.0;
-      scoreRef.current += Math.floor(points * multiplier);
+      centerX /= matches.length;
+      centerY /= matches.length;
+      
+      // Size multiplier (3 bubbles = 1x, 4+ = 1.5x, 6+ = 2x, 10+ = 3x)
+      const sizeMultiplier = matches.length >= 10 ? 3.0 : matches.length >= 6 ? 2.0 : matches.length > 3 ? 1.5 : 1.0;
+      // Combo multiplier (1x base, +0.5x per combo level)
+      const comboMultiplier = 1 + (comboRef.current - 1) * 0.5;
+      const totalMultiplier = sizeMultiplier * comboMultiplier;
+      const finalPoints = Math.floor(points * totalMultiplier);
+      
+      scoreRef.current += finalPoints;
       setScore(scoreRef.current);
+      
+      // Add floating score animation
+      const scoreId = floatingScoreId.current++;
+      setFloatingScores(prev => [...prev, {
+        id: scoreId,
+        points: finalPoints,
+        x: centerX,
+        y: centerY,
+        combo: comboRef.current,
+        color: COLOR_CONFIG[targetColor].hex
+      }]);
+      
+      // Remove floating score after animation
+      setTimeout(() => {
+        setFloatingScores(prev => prev.filter(s => s.id !== scoreId));
+      }, 1500);
+      
+      // Screen shake for big combos
+      if (matches.length >= 5 || comboRef.current >= 3) {
+        const shakeIntensity = Math.min(matches.length + comboRef.current * 2, 15);
+        setScreenShake(shakeIntensity);
+        setTimeout(() => setScreenShake(0), 300);
+      }
+      
+      // Perfect shot detection (hitting AI recommended target)
+      if (aimTargetRef.current) {
+        const distToTarget = Math.sqrt(
+          Math.pow(centerX - aimTargetRef.current.x, 2) + 
+          Math.pow(centerY - aimTargetRef.current.y, 2)
+        );
+        if (distToTarget < BUBBLE_RADIUS * 3) {
+          setPerfectShot(true);
+          setTimeout(() => setPerfectShot(false), 1000);
+        }
+      }
       
       // Play pop sound with combo info
       Sound.playPopSound(matches.length);
+      
+      // Check level progression (every 2000 points = new level)
+      const newLevel = Math.floor(scoreRef.current / 2000) + 1;
+      if (newLevel > level) {
+        setLevel(newLevel);
+        setLevelMessage(`Level ${newLevel}!`);
+        setTimeout(() => setLevelMessage(null), 2000);
+      }
+      
+      // Check win condition - all bubbles cleared
+      setTimeout(() => {
+        const remainingBubbles = bubbles.current.filter(b => b.active).length;
+        if (remainingBubbles === 0 && gameStatus === 'playing') {
+          setGameStatus('won');
+          setLevelMessage('🎉 YOU WIN! 🎉');
+        }
+      }, 100);
       
       return true;
     }
@@ -522,6 +642,8 @@ const GeminiSlingshot: React.FC = () => {
         const distToBall = Math.sqrt(Math.pow(inputPos.x - ballPos.current.x, 2) + Math.pow(inputPos.y - ballPos.current.y, 2));
         if (!isPinching.current && distToBall < 100) {
            isPinching.current = true;
+           setIsPulling(true);
+           setShowPullHint(false);
            // Play grab sound
            Sound.playGrabSound();
         }
@@ -532,15 +654,29 @@ const GeminiSlingshot: React.FC = () => {
             const dragDy = ballPos.current.y - anchorPos.current.y;
             const dragDist = Math.sqrt(dragDx*dragDx + dragDy*dragDy);
             
+            // Update power level for UI
+            const powerRatio = Math.min(dragDist / MAX_DRAG_DIST, 1.0);
+            setPowerLevel(powerRatio);
+            
+            // Calculate and store pull angle for UI
+            const angle = Math.atan2(-dragDy, -dragDx) * (180 / Math.PI);
+            setPullAngle(angle);
+            
+            // Vibration effect at high tension
+            if (powerRatio > 0.8) {
+              setPullVibration((Math.random() - 0.5) * (powerRatio - 0.8) * 10);
+            } else {
+              setPullVibration(0);
+            }
+            
             // Play stretch sound feedback (throttled)
             const now = performance.now();
             if (now - lastStretchSoundTime.current > 100 && dragDist > 20) {
-                const stretchRatio = Math.min(dragDist / MAX_DRAG_DIST, 1.0);
-                Sound.playStretchSound(stretchRatio);
+                Sound.playStretchSound(powerRatio);
                 lastStretchSoundTime.current = now;
                 
                 // Play max tension sound at full stretch
-                if (stretchRatio > 0.95) {
+                if (powerRatio > 0.95) {
                     Sound.playMaxTensionSound();
                 }
             }
@@ -555,6 +691,9 @@ const GeminiSlingshot: React.FC = () => {
       else if (isPinching.current && (!inputPos || pinchDist >= PINCH_THRESHOLD || isLocked)) {
         // Release or Forced Release if Locked
         isPinching.current = false;
+        setIsPulling(false);
+        setPowerLevel(0); // Reset power gauge
+        setPullVibration(0); // Reset vibration
         
         if (isLocked) {
              // If we lock while pinching, reset to anchor
@@ -564,7 +703,7 @@ const GeminiSlingshot: React.FC = () => {
             const dy = anchorPos.current.y - ballPos.current.y;
             const stretchDist = Math.sqrt(dx*dx + dy*dy);
             
-            if (stretchDist > 30) {
+            if (stretchDist > 30 && shotsRemaining > 0 && gameStatus === 'playing') {
                 isFlying.current = true;
                 flightStartTime.current = performance.now();
                 const powerRatio = Math.min(stretchDist / MAX_DRAG_DIST, 1.0);
@@ -574,6 +713,43 @@ const GeminiSlingshot: React.FC = () => {
                     x: dx * velocityMultiplier,
                     y: dy * velocityMultiplier
                 };
+                
+                // Release flash effect
+                setReleaseFlash(true);
+                setTimeout(() => setReleaseFlash(false), 150);
+                
+                // Create release burst particles at anchor point
+                for (let i = 0; i < 12; i++) {
+                  const angle = (Math.PI * 2 * i) / 12;
+                  const speed = 3 + Math.random() * 4;
+                  particles.current.push({
+                    x: anchorPos.current.x,
+                    y: anchorPos.current.y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    life: 0.8,
+                    color: powerRatio > 0.8 ? '#ffa726' : powerRatio > 0.5 ? '#ffee58' : '#66bb6a'
+                  });
+                }
+                
+                // Decrement shots
+                setShotsRemaining(prev => {
+                  const newShots = prev - 1;
+                  if (newShots <= 0) {
+                    // Check game over condition
+                    setTimeout(() => {
+                      const activeBubbles = bubbles.current.filter(b => b.active).length;
+                      if (activeBubbles === 0) {
+                        setGameStatus('won');
+                        setLevelMessage('🎉 YOU WIN! 🎉');
+                      } else {
+                        setGameStatus('lost');
+                        setLevelMessage('Game Over!');
+                      }
+                    }, 1000);
+                  }
+                  return newShots;
+                });
                 
                 // Play launch sound
                 Sound.playLaunchSound();
@@ -592,10 +768,26 @@ const GeminiSlingshot: React.FC = () => {
 
       // --- Physics ---
       if (isFlying.current) {
+        // Update ball trail
+        const now = performance.now();
+        if (now - lastTrailUpdate.current > 16) { // ~60fps
+          ballTrailRef.current.push({
+            x: ballPos.current.x,
+            y: ballPos.current.y,
+            age: 0
+          });
+          // Age existing trail points and remove old ones
+          ballTrailRef.current = ballTrailRef.current
+            .map(p => ({ ...p, age: p.age + 1 }))
+            .filter(p => p.age < 15);
+          lastTrailUpdate.current = now;
+        }
+        
         // Infinite bounce safeguard: if flying for more than 5 seconds (5000ms), cancel shot
         if (performance.now() - flightStartTime.current > 5000) {
             isFlying.current = false;
             Sound.stopFlyingSound();
+            ballTrailRef.current = []; // Clear trail
             ballPos.current = { ...anchorPos.current };
             ballVel.current = { x: 0, y: 0 };
         } else {
@@ -645,6 +837,7 @@ const GeminiSlingshot: React.FC = () => {
             if (collisionOccurred) {
                 isFlying.current = false;
                 Sound.stopFlyingSound();
+                ballTrailRef.current = []; // Clear trail on collision
                 
                 let bestDist = Infinity;
                 let bestRow = 0;
@@ -703,6 +896,7 @@ const GeminiSlingshot: React.FC = () => {
             if (ballPos.current.y > canvas.height) {
                 isFlying.current = false;
                 Sound.stopFlyingSound();
+                ballTrailRef.current = []; // Clear trail
                 ballPos.current = { ...anchorPos.current };
                 ballVel.current = { x: 0, y: 0 };
             }
@@ -817,16 +1011,81 @@ const GeminiSlingshot: React.FC = () => {
       
       // Removed Canvas "ANALYZING..." drawing code from here
 
-      // Slingshot Band (Back)
-      const bandColor = isPinching.current ? '#fdd835' : 'rgba(255,255,255,0.4)';
+      // Calculate pull strength for visual effects
+      const pullDx = ballPos.current.x - anchorPos.current.x;
+      const pullDy = ballPos.current.y - anchorPos.current.y;
+      const pullDist = Math.sqrt(pullDx * pullDx + pullDy * pullDy);
+      const pullStrength = Math.min(pullDist / MAX_DRAG_DIST, 1.0);
+      
+      // Dynamic band color based on pull strength
+      const getBandColor = () => {
+        if (!isPinching.current) return 'rgba(255,255,255,0.4)';
+        if (pullStrength > 0.9) return '#ef5350'; // Red - max power
+        if (pullStrength > 0.7) return '#ffa726'; // Orange - high power  
+        if (pullStrength > 0.4) return '#ffee58'; // Yellow - medium power
+        return '#66bb6a'; // Green - low power
+      };
+      
+      const bandColor = getBandColor();
+      const bandWidth = isPinching.current ? 5 + pullStrength * 6 : 5; // Thicker when pulled
+      
+      // Slingshot Band (Back) with glow
       if (!isFlying.current) {
+        ctx.save();
+        
+        // Glow effect when pulling
+        if (isPinching.current && pullStrength > 0.3) {
+          ctx.shadowBlur = 10 + pullStrength * 15;
+          ctx.shadowColor = bandColor;
+        }
+        
         ctx.beginPath();
         ctx.moveTo(anchorPos.current.x - 35, anchorPos.current.y - 10);
         ctx.lineTo(ballPos.current.x, ballPos.current.y);
-        ctx.lineWidth = 5;
+        ctx.lineWidth = bandWidth;
         ctx.strokeStyle = bandColor;
         ctx.lineCap = 'round';
         ctx.stroke();
+        ctx.restore();
+      }
+      
+      // Tension rings around ball when pulling
+      if (isPinching.current && pullStrength > 0.2) {
+        ctx.save();
+        const ringCount = Math.floor(pullStrength * 3) + 1;
+        for (let r = 0; r < ringCount; r++) {
+          const ringRadius = BUBBLE_RADIUS + 10 + r * 12;
+          const ringAlpha = (1 - r / ringCount) * 0.3 * pullStrength;
+          ctx.beginPath();
+          ctx.arc(ballPos.current.x + pullVibration, ballPos.current.y + pullVibration * 0.5, ringRadius, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(255, 255, 255, ${ringAlpha})`;
+          ctx.lineWidth = 2;
+          ctx.setLineDash([4, 4]);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      // Draw ball trail when flying
+      if (isFlying.current && ballTrailRef.current.length > 0) {
+        ctx.save();
+        const trailColor = COLOR_CONFIG[selectedColorRef.current].hex;
+        ballTrailRef.current.forEach((point, index) => {
+          const alpha = Math.max(0, 1 - point.age / 15) * 0.6;
+          const radius = BUBBLE_RADIUS * (1 - point.age / 20);
+          if (radius > 0) {
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+            ctx.fillStyle = trailColor.replace(')', `, ${alpha})`).replace('rgb', 'rgba');
+            // Convert hex to rgba
+            const r = parseInt(trailColor.slice(1, 3), 16);
+            const g = parseInt(trailColor.slice(3, 5), 16);
+            const b = parseInt(trailColor.slice(5, 7), 16);
+            ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+            ctx.fill();
+          }
+        });
+        ctx.restore();
       }
 
       // Draw Slingshot Ball (Projectile)
@@ -835,21 +1094,85 @@ const GeminiSlingshot: React.FC = () => {
       if (isLocked && !isFlying.current) {
           ctx.globalAlpha = 0.5;
       }
-      drawBubble(ctx, ballPos.current.x, ballPos.current.y, BUBBLE_RADIUS, selectedColorRef.current);
+      // Apply vibration offset when at high tension
+      const vibX = isPinching.current ? pullVibration : 0;
+      const vibY = isPinching.current ? pullVibration * 0.5 : 0;
+      drawBubble(ctx, ballPos.current.x + vibX, ballPos.current.y + vibY, BUBBLE_RADIUS, selectedColorRef.current);
+      
+      // Add glow effect when flying
+      if (isFlying.current) {
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = COLOR_CONFIG[selectedColorRef.current].hex;
+        ctx.beginPath();
+        ctx.arc(ballPos.current.x, ballPos.current.y, BUBBLE_RADIUS + 2, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
       ctx.restore();
 
-      // Slingshot Band (Front)
+      // Slingshot Band (Front) with glow
       if (!isFlying.current) {
+        ctx.save();
+        
+        if (isPinching.current && pullStrength > 0.3) {
+          ctx.shadowBlur = 10 + pullStrength * 15;
+          ctx.shadowColor = bandColor;
+        }
+        
         ctx.beginPath();
         ctx.moveTo(ballPos.current.x, ballPos.current.y);
         ctx.lineTo(anchorPos.current.x + 35, anchorPos.current.y - 10);
-        ctx.lineWidth = 5;
+        ctx.lineWidth = bandWidth;
         ctx.strokeStyle = bandColor;
         ctx.lineCap = 'round';
         ctx.stroke();
+        ctx.restore();
+      }
+      
+      // Direction arrow when pulling
+      if (isPinching.current && pullStrength > 0.15) {
+        ctx.save();
+        const arrowLen = 40 + pullStrength * 60;
+        const arrowAngle = Math.atan2(-pullDy, -pullDx); // Direction of shot
+        const arrowX = anchorPos.current.x + Math.cos(arrowAngle) * (arrowLen + 30);
+        const arrowY = anchorPos.current.y + Math.sin(arrowAngle) * (arrowLen + 30);
+        
+        // Arrow line
+        ctx.beginPath();
+        ctx.moveTo(anchorPos.current.x, anchorPos.current.y);
+        ctx.lineTo(arrowX, arrowY);
+        ctx.strokeStyle = `rgba(255, 255, 255, ${0.3 + pullStrength * 0.4})`;
+        ctx.lineWidth = 3;
+        ctx.setLineDash([8, 4]);
+        ctx.stroke();
+        
+        // Arrow head
+        const headLen = 15;
+        ctx.beginPath();
+        ctx.moveTo(arrowX, arrowY);
+        ctx.lineTo(
+          arrowX - headLen * Math.cos(arrowAngle - Math.PI / 6),
+          arrowY - headLen * Math.sin(arrowAngle - Math.PI / 6)
+        );
+        ctx.moveTo(arrowX, arrowY);
+        ctx.lineTo(
+          arrowX - headLen * Math.cos(arrowAngle + Math.PI / 6),
+          arrowY - headLen * Math.sin(arrowAngle + Math.PI / 6)
+        );
+        ctx.setLineDash([]);
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.restore();
       }
 
-      // Slingshot Handle
+      // Slingshot Handle with enhanced visuals
+      ctx.save();
+      // Handle glow on pull
+      if (isPinching.current) {
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = 'rgba(255, 255, 255, 0.3)';
+      }
       ctx.beginPath();
       ctx.moveTo(anchorPos.current.x, canvas.height); 
       ctx.lineTo(anchorPos.current.x, anchorPos.current.y + 40); 
@@ -858,8 +1181,16 @@ const GeminiSlingshot: React.FC = () => {
       ctx.lineTo(anchorPos.current.x + 40, anchorPos.current.y); 
       ctx.lineWidth = 10;
       ctx.lineCap = 'round';
-      ctx.strokeStyle = '#616161';
+      ctx.strokeStyle = isPinching.current ? '#757575' : '#616161';
       ctx.stroke();
+      
+      // Fork tips highlight
+      ctx.beginPath();
+      ctx.arc(anchorPos.current.x - 40, anchorPos.current.y, 6, 0, Math.PI * 2);
+      ctx.arc(anchorPos.current.x + 40, anchorPos.current.y, 6, 0, Math.PI * 2);
+      ctx.fillStyle = isPinching.current ? '#9e9e9e' : '#757575';
+      ctx.fill();
+      ctx.restore();
 
       // Particles
       for (let i = particles.current.length - 1; i >= 0; i--) {
@@ -937,13 +1268,21 @@ const GeminiSlingshot: React.FC = () => {
   const recColorConfig = aiRecommendedColor ? COLOR_CONFIG[aiRecommendedColor] : null;
   const borderColor = recColorConfig ? recColorConfig.hex : '#444746';
 
+  // Screen shake style
+  const shakeStyle = screenShake > 0 ? {
+    transform: `translate(${(Math.random() - 0.5) * screenShake}px, ${(Math.random() - 0.5) * screenShake}px)`,
+    transition: 'transform 0.05s'
+  } : {};
+
   return (
     <div className="flex w-full h-screen bg-[#121212] overflow-hidden font-roboto text-[#e3e3e3]">
       
-
-
       {/* LEFT: Game Area */}
-      <div ref={gameContainerRef} className="flex-1 relative h-full overflow-hidden touch-none">
+      <div 
+        ref={gameContainerRef} 
+        className="flex-1 relative h-full overflow-hidden touch-none"
+        style={shakeStyle}
+      >
         <video ref={videoRef} className="absolute hidden" playsInline />
         <canvas 
             ref={canvasRef} 
@@ -979,6 +1318,103 @@ const GeminiSlingshot: React.FC = () => {
             }}
         />
 
+        {/* Floating Score Animations */}
+        {floatingScores.map(fs => (
+          <div
+            key={fs.id}
+            className="absolute pointer-events-none z-50 animate-float-up"
+            style={{
+              left: fs.x,
+              top: fs.y,
+              transform: 'translate(-50%, -50%)',
+              animation: 'floatUp 1.5s ease-out forwards'
+            }}
+          >
+            <div className="text-center">
+              <div 
+                className="text-3xl font-black drop-shadow-lg"
+                style={{ 
+                  color: fs.color,
+                  textShadow: `0 0 20px ${fs.color}, 0 0 40px ${fs.color}`,
+                  fontSize: fs.combo > 1 ? `${Math.min(2 + fs.combo * 0.3, 4)}rem` : '1.5rem'
+                }}
+              >
+                +{fs.points.toLocaleString()}
+              </div>
+              {fs.combo > 1 && (
+                <div className="text-yellow-400 font-bold text-sm animate-pulse">
+                  🔥 {fs.combo}x COMBO!
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+
+        {/* Perfect Shot Indicator */}
+        {perfectShot && (
+          <div className="absolute inset-0 flex items-center justify-center z-50 pointer-events-none">
+            <div className="text-5xl font-black text-yellow-400 animate-bounce drop-shadow-lg" 
+                 style={{ textShadow: '0 0 30px gold, 0 0 60px gold' }}>
+              ✨ PERFECT! ✨
+            </div>
+          </div>
+        )}
+
+        {/* Level Up / Game Status Message */}
+        {levelMessage && (
+          <div className="absolute inset-0 flex items-center justify-center z-50 pointer-events-none">
+            <div className={`text-6xl font-black animate-pulse drop-shadow-lg ${gameStatus === 'won' ? 'text-green-400' : gameStatus === 'lost' ? 'text-red-400' : 'text-purple-400'}`}
+                 style={{ textShadow: '0 0 40px currentColor' }}>
+              {levelMessage}
+            </div>
+          </div>
+        )}
+
+        {/* Game Over Overlay with Restart */}
+        {(gameStatus === 'won' || gameStatus === 'lost') && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center z-50 bg-black/70 backdrop-blur-sm">
+            <div className="text-center space-y-6">
+              <div className={`text-6xl font-black ${gameStatus === 'won' ? 'text-green-400' : 'text-red-400'}`}
+                   style={{ textShadow: '0 0 40px currentColor' }}>
+                {gameStatus === 'won' ? '🎉 VICTORY! 🎉' : '💥 GAME OVER 💥'}
+              </div>
+              
+              <div className="space-y-2">
+                <p className="text-3xl font-bold text-white">Final Score: {score.toLocaleString()}</p>
+                <p className="text-xl text-gray-400">Level {level} • Max Combo: {maxCombo}x</p>
+              </div>
+              
+              <button
+                onClick={() => {
+                  // Reset game state
+                  setScore(0);
+                  scoreRef.current = 0;
+                  setLevel(1);
+                  setShotsRemaining(50);
+                  setComboCount(0);
+                  comboRef.current = 0;
+                  setMaxCombo(0);
+                  setGameStatus('playing');
+                  setLevelMessage(null);
+                  setAiHint("Analyzing new game...");
+                  setAiRecommendedColor(null);
+                  setAimTarget(null);
+                  
+                  // Reinitialize grid
+                  const width = canvasRef.current?.width || 800;
+                  initGrid(width);
+                  
+                  Sound.playGameStartSound();
+                }}
+                className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-xl font-bold rounded-full shadow-2xl transform hover:scale-105 transition-all"
+                style={{ boxShadow: '0 0 30px rgba(99, 102, 241, 0.5)' }}
+              >
+                🔄 PLAY AGAIN
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Loading Overlay */}
         {loading && (
             <div className="absolute inset-0 flex items-center justify-center bg-[#121212] z-50">
@@ -1000,17 +1436,151 @@ const GeminiSlingshot: React.FC = () => {
           </div>
         )}
 
-        {/* HUD: Score Card */}
-        <div className="absolute top-6 left-6 z-40 flex gap-3">
-            <div className="bg-[#1e1e1e] p-5 rounded-[28px] border border-[#444746] shadow-2xl flex items-center gap-4 min-w-[180px]">
-                <div className="bg-[#42a5f5]/20 p-3 rounded-full">
-                    <Trophy className="w-6 h-6 text-[#42a5f5]" />
+        {/* Release Flash Effect */}
+        {releaseFlash && (
+          <div 
+            className="absolute inset-0 z-30 pointer-events-none"
+            style={{
+              background: 'radial-gradient(circle at 50% 75%, rgba(255, 255, 255, 0.4) 0%, transparent 50%)',
+              animation: 'releaseFlash 0.15s ease-out forwards'
+            }}
+          />
+        )}
+
+        {/* Enhanced Power Gauge - Shows when pulling slingshot */}
+        {powerLevel > 0 && (
+          <div className="absolute left-6 bottom-32 z-40 flex flex-col items-center gap-2">
+            {/* Power percentage */}
+            <div className={`text-xs font-bold ${powerLevel > 0.9 ? 'text-red-400 animate-pulse' : powerLevel > 0.7 ? 'text-orange-400' : powerLevel > 0.4 ? 'text-yellow-400' : 'text-green-400'}`}>
+              {Math.round(powerLevel * 100)}%
+            </div>
+            
+            {/* Main gauge */}
+            <div className="w-5 h-44 bg-[#1e1e1e] rounded-full border-2 border-[#444746] overflow-hidden relative"
+                 style={{ boxShadow: powerLevel > 0.9 ? '0 0 20px rgba(239, 83, 80, 0.5)' : 'none' }}>
+              <div 
+                className="absolute bottom-0 w-full transition-all duration-75 rounded-full"
+                style={{ 
+                  height: `${powerLevel * 100}%`,
+                  background: powerLevel < 0.4 
+                    ? 'linear-gradient(to top, #4caf50, #8bc34a)' 
+                    : powerLevel < 0.7 
+                      ? 'linear-gradient(to top, #ffeb3b, #ffc107)' 
+                      : powerLevel < 0.9
+                        ? 'linear-gradient(to top, #ff9800, #ff5722)'
+                        : 'linear-gradient(to top, #f44336, #e91e63)',
+                  boxShadow: powerLevel > 0.9 ? '0 0 15px #ef5350, inset 0 0 10px rgba(255,255,255,0.3)' : 'inset 0 0 10px rgba(255,255,255,0.2)'
+                }}
+              />
+              {/* Power level markers */}
+              <div className="absolute left-0 right-0 top-[10%] h-0.5 bg-red-500/60" />
+              <div className="absolute left-0 right-0 top-[30%] h-0.5 bg-orange-500/40" />
+              <div className="absolute left-0 right-0 top-[60%] h-0.5 bg-yellow-500/30" />
+            </div>
+            
+            {/* Power label */}
+            <div className="text-[10px] text-gray-400 uppercase tracking-wider font-medium">Power</div>
+          </div>
+        )}
+        
+        {/* Pull angle indicator when aiming */}
+        {isPulling && powerLevel > 0.1 && (
+          <div 
+            className="absolute z-40 pointer-events-none flex flex-col items-center"
+            style={{ 
+              bottom: '280px',
+              left: '50%',
+              transform: 'translateX(-50%)'
+            }}
+          >
+            <div className="bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-full border border-white/20">
+              <span className="text-white text-sm font-mono">
+                {pullAngle > 0 ? `↗ ${Math.abs(pullAngle).toFixed(0)}°` : pullAngle < 0 ? `↘ ${Math.abs(pullAngle).toFixed(0)}°` : '↑ 90°'}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* First-time pull hint */}
+        {showPullHint && !loading && !isAiThinking && gameStatus === 'playing' && (
+          <div 
+            className="absolute z-40 pointer-events-none animate-bounce"
+            style={{ 
+              bottom: '260px',
+              left: '50%',
+              transform: 'translateX(-50%)'
+            }}
+          >
+            <div className="bg-gradient-to-r from-blue-500/80 to-purple-500/80 backdrop-blur-sm px-4 py-2 rounded-xl border border-white/30 shadow-lg">
+              <div className="flex items-center gap-2 text-white">
+                <span className="text-xl">👇</span>
+                <span className="text-sm font-medium">Grab & Pull to Aim</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* HUD: Score Card & Stats */}
+        <div className="absolute top-6 left-6 z-40 flex flex-col gap-3">
+          <div className="flex gap-3">
+            {/* Score */}
+            <div className="bg-[#1e1e1e] p-4 rounded-[28px] border border-[#444746] shadow-2xl flex items-center gap-3 min-w-[160px]">
+                <div className="bg-[#42a5f5]/20 p-2.5 rounded-full">
+                    <Trophy className="w-5 h-5 text-[#42a5f5]" />
                 </div>
                 <div>
-                    <p className="text-xs text-[#c4c7c5] uppercase tracking-wider font-medium">Score</p>
-                    <p className="text-3xl font-bold text-white">{score.toLocaleString()}</p>
+                    <p className="text-[10px] text-[#c4c7c5] uppercase tracking-wider font-medium">Score</p>
+                    <p className="text-2xl font-bold text-white">{score.toLocaleString()}</p>
                 </div>
             </div>
+            
+            {/* Level Badge */}
+            <div className="bg-gradient-to-br from-purple-600 to-purple-900 p-4 rounded-[28px] border border-purple-500/50 shadow-2xl flex items-center gap-3">
+                <div className="text-center">
+                    <p className="text-[10px] text-purple-200 uppercase tracking-wider font-medium">Level</p>
+                    <p className="text-2xl font-bold text-white">{level}</p>
+                </div>
+            </div>
+          </div>
+          
+          {/* Combo & Shots Row */}
+          <div className="flex gap-3">
+            {/* Combo Counter */}
+            {comboCount > 0 && (
+              <div className={`bg-gradient-to-br ${comboCount >= 5 ? 'from-orange-500 to-red-600 animate-pulse' : comboCount >= 3 ? 'from-yellow-500 to-orange-600' : 'from-blue-500 to-purple-600'} p-3 rounded-2xl shadow-2xl flex items-center gap-2 transition-all`}
+                   style={{ boxShadow: comboCount >= 3 ? '0 0 20px rgba(255, 165, 0, 0.5)' : 'none' }}>
+                <span className="text-2xl">🔥</span>
+                <div>
+                  <p className="text-[10px] text-white/80 uppercase font-medium">Combo</p>
+                  <p className="text-xl font-black text-white">{comboCount}x</p>
+                </div>
+              </div>
+            )}
+            
+            {/* Shots Remaining */}
+            <div className={`bg-[#1e1e1e] p-3 rounded-2xl border ${shotsRemaining <= 5 ? 'border-red-500/50 bg-red-900/20' : 'border-[#444746]'} shadow-2xl flex items-center gap-2`}>
+                <div className={`text-xl ${shotsRemaining <= 5 ? 'animate-pulse' : ''}`}>🎯</div>
+                <div>
+                    <p className="text-[10px] text-[#c4c7c5] uppercase font-medium">Shots</p>
+                    <p className={`text-xl font-bold ${shotsRemaining <= 5 ? 'text-red-400' : 'text-white'}`}>{shotsRemaining}</p>
+                </div>
+            </div>
+            
+            {/* Max Combo Badge */}
+            {maxCombo >= 3 && (
+              <div className="bg-[#1e1e1e] p-3 rounded-2xl border border-yellow-500/30 shadow-2xl flex items-center gap-2">
+                <span className="text-lg">🏆</span>
+                <div>
+                  <p className="text-[10px] text-yellow-500/80 uppercase font-medium">Best</p>
+                  <p className="text-lg font-bold text-yellow-400">{maxCombo}x</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+        
+        {/* Sound Controls - Top Right */}
+        <div className="absolute top-6 right-6 z-40 flex gap-2">
             
             {/* Sound Toggle Button */}
             <button

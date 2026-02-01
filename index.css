@@ -90,3 +90,112 @@ html, body, #root {
   background: rgba(99, 102, 241, 0.3);
   color: white;
 }
+
+/* Floating score animation */
+@keyframes floatUp {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.5);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.2);
+  }
+  40% {
+    transform: translate(-50%, -80%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -200%) scale(0.8);
+  }
+}
+
+/* Combo fire animation */
+@keyframes fireGlow {
+  0%, 100% {
+    filter: drop-shadow(0 0 10px orange);
+  }
+  50% {
+    filter: drop-shadow(0 0 25px red);
+  }
+}
+
+/* Level up pulse */
+@keyframes levelPulse {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Power bar glow */
+@keyframes powerGlow {
+  0%, 100% {
+    box-shadow: 0 0 5px rgba(255, 0, 0, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(255, 0, 0, 1);
+  }
+}
+
+/* Perfect shot sparkle */
+@keyframes perfectSparkle {
+  0%, 100% {
+    text-shadow: 0 0 20px gold, 0 0 40px gold, 0 0 60px gold;
+  }
+  50% {
+    text-shadow: 0 0 40px gold, 0 0 80px gold, 0 0 120px gold;
+  }
+}
+
+/* Release flash animation */
+@keyframes releaseFlash {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+/* Pull tension pulse */
+@keyframes tensionPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+}
+
+/* Slingshot ready bounce */
+@keyframes readyBounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+/* Power meter glow */
+@keyframes powerGlowPulse {
+  0%, 100% {
+    box-shadow: 0 0 10px currentColor;
+  }
+  50% {
+    box-shadow: 0 0 25px currentColor, 0 0 40px currentColor;
+  }
+}
